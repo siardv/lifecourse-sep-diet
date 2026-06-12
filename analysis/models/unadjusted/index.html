@@ -1,0 +1,2516 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.38">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Siard van den Bosch">
+<meta name="dcterms.date" content="2024-12-15">
+
+<title>Unadjusted Regression Models – Reproducible Diet &amp; Health Analysis Pipeline</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+/* CSS for citations */
+div.csl-bib-body { }
+div.csl-entry {
+  clear: both;
+}
+.hanging-indent div.csl-entry {
+  margin-left:2em;
+  text-indent:-2em;
+}
+div.csl-left-margin {
+  min-width:2em;
+  float:left;
+}
+div.csl-right-inline {
+  margin-left:2em;
+  padding-left:1em;
+}
+div.csl-indent {
+  margin-left: 2em;
+}</style>
+
+
+<script src="../../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../../">
+<script src="../../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../../site_libs/quarto-html/quarto-syntax-highlighting-f540398f06f5761fd6ec65d376638bec.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../../site_libs/bootstrap/bootstrap-fe4dec1d006b0d9f8d6bd10fa228eddd.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<style>html{ scroll-behavior: smooth; }</style>
+
+
+<link rel="stylesheet" href="../../../assets/style/custom.css">
+</head>
+
+<body class="floating nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../../../index.html">
+    <span class="navbar-title">SES &amp; Diet Quality</span>
+    </a>
+  </div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../../analysis/setup/index.html"> 
+<span class="menu-text">Setup</span></a>
+  </li>  
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-data-processing" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Data Processing</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-data-processing">    
+        <li>
+    <a class="dropdown-item" href="../../../analysis/data/preparation/index.html">
+ <span class="dropdown-text">ISCO-08 Standardization</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/data/cleaning/index.html">
+ <span class="dropdown-text">Data Cleaning</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/data/outliers/index.html">
+ <span class="dropdown-text">Outliers Detection</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/data/imputation/index.html">
+ <span class="dropdown-text">Missing Data Imputation</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/data/post-imputation/index.html">
+ <span class="dropdown-text">Post-Imputation Finalization</span></a>
+  </li>  
+    </ul>
+  </li>
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-modeling" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Modeling</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-modeling">    
+        <li>
+    <a class="dropdown-item" href="../../../analysis/models/unadjusted/index.html">
+ <span class="dropdown-text">Unadjusted Models</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/models/assumptions/index.html">
+ <span class="dropdown-text">Influence Diagnostics</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/models/adjusted/index.html">
+ <span class="dropdown-text">Adjusted Models</span></a>
+  </li>  
+    </ul>
+  </li>
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-model-evaluation" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Model Evaluation</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-model-evaluation">    
+        <li>
+    <a class="dropdown-item" href="../../../analysis/models/goodness-of-fit/model-fit/index.html">
+ <span class="dropdown-text">Initial Model Evaluation</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/models/goodness-of-fit/interaction-effects/index.html">
+ <span class="dropdown-text">Interaction Effects</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/models/goodness-of-fit/performance-metrics/index.html">
+ <span class="dropdown-text">Bootstrapped Validation</span></a>
+  </li>  
+    </ul>
+  </li>
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Contents</h2>
+   
+  <ul>
+  <li><a href="#verify-dataset-from-step-6" id="toc-verify-dataset-from-step-6" class="nav-link active" data-scroll-target="#verify-dataset-from-step-6"><span class="header-section-number">1</span> Verify Dataset from Step 6</a></li>
+  <li><a href="#model-specifications" id="toc-model-specifications" class="nav-link" data-scroll-target="#model-specifications"><span class="header-section-number">2</span> Model Specifications</a>
+  <ul>
+  <li><a href="#model-0-null-model" id="toc-model-0-null-model" class="nav-link" data-scroll-target="#model-0-null-model"><span class="header-section-number">2.1</span> Model 0: Null Model</a></li>
+  <li><a href="#model-1-adult-covariates-and-own-ses-adjustment-set" id="toc-model-1-adult-covariates-and-own-ses-adjustment-set" class="nav-link" data-scroll-target="#model-1-adult-covariates-and-own-ses-adjustment-set"><span class="header-section-number">2.2</span> Model 1: Adult Covariates and Own SES (Adjustment Set)</a></li>
+  </ul></li>
+  <li><a href="#composite-ses-models-models-26" id="toc-composite-ses-models-models-26" class="nav-link" data-scroll-target="#composite-ses-models-models-26"><span class="header-section-number">3</span> Composite SES Models (Models 2–6)</a>
+  <ul>
+  <li><a href="#model-2-add-parental-ses-main-effects-h1-rq1" id="toc-model-2-add-parental-ses-main-effects-h1-rq1" class="nav-link" data-scroll-target="#model-2-add-parental-ses-main-effects-h1-rq1"><span class="header-section-number">3.1</span> Model 2: Add Parental SES Main Effects (H1, RQ1)</a></li>
+  <li><a href="#model-3-add-partner-ses-main-effects-h2-rq2" id="toc-model-3-add-partner-ses-main-effects-h2-rq2" class="nav-link" data-scroll-target="#model-3-add-partner-ses-main-effects-h2-rq2"><span class="header-section-number">3.2</span> Model 3: Add Partner SES Main Effects (H2, RQ2)</a></li>
+  <li><a href="#model-4-gender-moderation-of-parental-and-partner-ses-h3-h4-rq3" id="toc-model-4-gender-moderation-of-parental-and-partner-ses-h3-h4-rq3" class="nav-link" data-scroll-target="#model-4-gender-moderation-of-parental-and-partner-ses-h3-h4-rq3"><span class="header-section-number">3.3</span> Model 4: Gender Moderation of Parental and Partner SES (H3, H4, RQ3)</a></li>
+  <li><a href="#model-5-parental-partner-ses-synergy-h5-rq4" id="toc-model-5-parental-partner-ses-synergy-h5-rq4" class="nav-link" data-scroll-target="#model-5-parental-partner-ses-synergy-h5-rq4"><span class="header-section-number">3.4</span> Model 5: Parental × Partner SES Synergy (H5, RQ4)</a></li>
+  <li><a href="#model-6-gender-moderation-of-synergy-h6-rq4" id="toc-model-6-gender-moderation-of-synergy-h6-rq4" class="nav-link" data-scroll-target="#model-6-gender-moderation-of-synergy-h6-rq4"><span class="header-section-number">3.5</span> Model 6: Gender Moderation of Synergy (H6, RQ4)</a></li>
+  </ul></li>
+  <li><a href="#disaggregated-ses-models-models-711" id="toc-disaggregated-ses-models-models-711" class="nav-link" data-scroll-target="#disaggregated-ses-models-models-711"><span class="header-section-number">4</span> Disaggregated SES Models (Models 7–11)</a>
+  <ul>
+  <li><a href="#model-7-mother-and-father-ses-main-effects-h1-rq1" id="toc-model-7-mother-and-father-ses-main-effects-h1-rq1" class="nav-link" data-scroll-target="#model-7-mother-and-father-ses-main-effects-h1-rq1"><span class="header-section-number">4.1</span> Model 7: Mother and Father SES Main Effects (H1, RQ1)</a></li>
+  <li><a href="#model-8-add-partner-ses-main-effects-h2-rq2" id="toc-model-8-add-partner-ses-main-effects-h2-rq2" class="nav-link" data-scroll-target="#model-8-add-partner-ses-main-effects-h2-rq2"><span class="header-section-number">4.2</span> Model 8: Add Partner SES Main Effects (H2, RQ2)</a></li>
+  <li><a href="#model-9-gender-motherfatherpartner-ses-interactions-h3-h4-rq3" id="toc-model-9-gender-motherfatherpartner-ses-interactions-h3-h4-rq3" class="nav-link" data-scroll-target="#model-9-gender-motherfatherpartner-ses-interactions-h3-h4-rq3"><span class="header-section-number">4.3</span> Model 9: Gender × Mother/Father/Partner SES Interactions (H3, H4, RQ3)</a></li>
+  <li><a href="#model-10-mother-partner-and-father-partner-synergy-h5-rq4" id="toc-model-10-mother-partner-and-father-partner-synergy-h5-rq4" class="nav-link" data-scroll-target="#model-10-mother-partner-and-father-partner-synergy-h5-rq4"><span class="header-section-number">4.4</span> Model 10: Mother × Partner and Father × Partner Synergy (H5, RQ4)</a></li>
+  <li><a href="#model-11-gender-parent-specific-synergy-h6-rq4" id="toc-model-11-gender-parent-specific-synergy-h6-rq4" class="nav-link" data-scroll-target="#model-11-gender-parent-specific-synergy-h6-rq4"><span class="header-section-number">4.5</span> Model 11: Gender × Parent-Specific Synergy (H6, RQ4)</a></li>
+  </ul></li>
+  <li><a href="#prepare-data-for-model-fitting" id="toc-prepare-data-for-model-fitting" class="nav-link" data-scroll-target="#prepare-data-for-model-fitting"><span class="header-section-number">5</span> Prepare Data for Model Fitting</a></li>
+  <li><a href="#fit-regression-models" id="toc-fit-regression-models" class="nav-link" data-scroll-target="#fit-regression-models"><span class="header-section-number">6</span> Fit Regression Models</a>
+  <ul>
+  <li><a href="#fit-model-0-null-model-baseline" id="toc-fit-model-0-null-model-baseline" class="nav-link" data-scroll-target="#fit-model-0-null-model-baseline"><span class="header-section-number">6.1</span> Fit Model 0: Null Model (Baseline)</a></li>
+  <li><a href="#fit-model-1-adult-covariates-and-own-ses-baseline" id="toc-fit-model-1-adult-covariates-and-own-ses-baseline" class="nav-link" data-scroll-target="#fit-model-1-adult-covariates-and-own-ses-baseline"><span class="header-section-number">6.2</span> Fit Model 1: Adult Covariates and Own SES (Baseline)</a></li>
+  <li><a href="#fit-model-2-parental-ses-main-effects-composite-h1-rq1" id="toc-fit-model-2-parental-ses-main-effects-composite-h1-rq1" class="nav-link" data-scroll-target="#fit-model-2-parental-ses-main-effects-composite-h1-rq1"><span class="header-section-number">6.3</span> Fit Model 2: Parental SES Main Effects, Composite (H1, RQ1)</a></li>
+  <li><a href="#fit-model-3-partner-ses-main-effects-composite-h2-rq2" id="toc-fit-model-3-partner-ses-main-effects-composite-h2-rq2" class="nav-link" data-scroll-target="#fit-model-3-partner-ses-main-effects-composite-h2-rq2"><span class="header-section-number">6.4</span> Fit Model 3: Partner SES Main Effects, Composite (H2, RQ2)</a></li>
+  <li><a href="#fit-model-4-gender-moderation-of-ses-composite-h3-h4-rq3" id="toc-fit-model-4-gender-moderation-of-ses-composite-h3-h4-rq3" class="nav-link" data-scroll-target="#fit-model-4-gender-moderation-of-ses-composite-h3-h4-rq3"><span class="header-section-number">6.5</span> Fit Model 4: Gender Moderation of SES, Composite (H3, H4, RQ3)</a></li>
+  <li><a href="#fit-model-5-parental-partner-synergy-composite-h5-rq4" id="toc-fit-model-5-parental-partner-synergy-composite-h5-rq4" class="nav-link" data-scroll-target="#fit-model-5-parental-partner-synergy-composite-h5-rq4"><span class="header-section-number">6.6</span> Fit Model 5: Parental × Partner Synergy, Composite (H5, RQ4)</a></li>
+  <li><a href="#fit-model-6-gender-moderated-synergy-composite-h6-rq4" id="toc-fit-model-6-gender-moderated-synergy-composite-h6-rq4" class="nav-link" data-scroll-target="#fit-model-6-gender-moderated-synergy-composite-h6-rq4"><span class="header-section-number">6.7</span> Fit Model 6: Gender-Moderated Synergy, Composite (H6, RQ4)</a></li>
+  <li><a href="#fit-model-7-motherfather-ses-main-effects-disaggregated-h1-rq1" id="toc-fit-model-7-motherfather-ses-main-effects-disaggregated-h1-rq1" class="nav-link" data-scroll-target="#fit-model-7-motherfather-ses-main-effects-disaggregated-h1-rq1"><span class="header-section-number">6.8</span> Fit Model 7: Mother/Father SES Main Effects, Disaggregated (H1, RQ1)</a></li>
+  <li><a href="#fit-model-8-partner-ses-main-effects-disaggregated-h2-rq2" id="toc-fit-model-8-partner-ses-main-effects-disaggregated-h2-rq2" class="nav-link" data-scroll-target="#fit-model-8-partner-ses-main-effects-disaggregated-h2-rq2"><span class="header-section-number">6.9</span> Fit Model 8: Partner SES Main Effects, Disaggregated (H2, RQ2)</a></li>
+  <li><a href="#fit-model-9-gender-motherfatherpartner-ses-disaggregated-h3-h4-rq3" id="toc-fit-model-9-gender-motherfatherpartner-ses-disaggregated-h3-h4-rq3" class="nav-link" data-scroll-target="#fit-model-9-gender-motherfatherpartner-ses-disaggregated-h3-h4-rq3"><span class="header-section-number">6.10</span> Fit Model 9: Gender × Mother/Father/Partner SES, Disaggregated (H3, H4, RQ3)</a></li>
+  <li><a href="#fit-model-10-parent-partner-synergy-disaggregated-h5-rq4" id="toc-fit-model-10-parent-partner-synergy-disaggregated-h5-rq4" class="nav-link" data-scroll-target="#fit-model-10-parent-partner-synergy-disaggregated-h5-rq4"><span class="header-section-number">6.11</span> Fit Model 10: Parent × Partner Synergy, Disaggregated (H5, RQ4)</a></li>
+  <li><a href="#fit-model-11-gender-parent-specific-synergy-disaggregated-h6-rq4" id="toc-fit-model-11-gender-parent-specific-synergy-disaggregated-h6-rq4" class="nav-link" data-scroll-target="#fit-model-11-gender-parent-specific-synergy-disaggregated-h6-rq4"><span class="header-section-number">6.12</span> Fit Model 11: Gender × Parent-Specific Synergy, Disaggregated (H6, RQ4)</a></li>
+  </ul></li>
+  <li><a href="#save-all-model-fits" id="toc-save-all-model-fits" class="nav-link" data-scroll-target="#save-all-model-fits"><span class="header-section-number">7</span> Save All Model Fits</a></li>
+  <li><a href="#output" id="toc-output" class="nav-link" data-scroll-target="#output"><span class="header-section-number">8</span> Output</a></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/siardv/lifecourse-sep-diet/blob/main/analysis/models/unadjusted/index.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/siardv/lifecourse-sep-diet/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></nav>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
+    </div>
+<!-- main -->
+<main class="content page-columns page-full" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<div class="quarto-title-block"><div><h1 class="title">Unadjusted Regression Models</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Toggle Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li></ul></div></div>
+<p class="subtitle lead">Baseline MM-Estimation Fits Before Outlier Adjustment</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Siard van den Bosch </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">December 15, 2024</p>
+    </div>
+  </div>
+  
+    <div>
+    <div class="quarto-title-meta-heading">Modified</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date-modified">June 12, 2026</p>
+    </div>
+  </div>
+    
+  </div>
+  
+
+
+</header>
+
+
+<script>
+  window.config = {offset: 7};
+</script>
+<div style="margin-block-end: 2rem;">
+
+</div>
+<table class="caption-top table">
+<tbody>
+<tr class="odd">
+<td><strong>Purpose</strong></td>
+<td>Produce baseline MM-estimation fits for Models 0–11 on the full sample</td>
+</tr>
+<tr class="even">
+<td><strong>Inputs</strong></td>
+<td><code>analysis_ready.sav</code></td>
+</tr>
+<tr class="odd">
+<td><strong>Outputs</strong></td>
+<td><code>models.rds</code>, <code>unadjusted_data.rds</code>, <code>unadjusted_fit_{0..11}.rds</code>, <code>unadjusted_fits.rds</code></td>
+</tr>
+<tr class="even">
+<td><strong>Method</strong></td>
+<td>MM-estimation robust regression (bisquare ψ); bootstrapping disabled</td>
+</tr>
+<tr class="odd">
+<td><strong>Requires</strong></td>
+<td><a href="../../../analysis/data/post-imputation/index.html">Step 6 (Post-Imputation Finalization)</a></td>
+</tr>
+</tbody>
+</table>
+<div style="margin-block-end: 1rem;">
+
+</div>
+<div class="callout callout-style-default callout-note no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Rationale
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<ul>
+<li>Energy adjustment: <code>dhd_kcal</code> enters as a covariate so that parental and partner SEP coefficients reflect dietary composition rather than caloric volume, consistent with the DHD15 scoring framework <span class="citation" data-cites="looman2017dutch">(<a href="#ref-looman2017dutch" role="doc-biblioref">Looman et al. 2017</a>)</span></li>
+<li>Lifestyle covariate: <code>smoking</code> is adjusted for as a co-occurring health behaviour; this follows standard practice in SES–diet research and is not attributed to a single source</li>
+<li>Own SES at baseline: entering <code>education_self</code> and <code>isei08_self</code> in Model 1 yields parental and partner SEP coefficients interpreted net of own attainment, matching the wording of H1 and H2</li>
+<li>Parallel composite and disaggregated families: Models 2–6 test mean-of-parents effects; Models 7–11 reproduce the same nesting with separate mother and father terms to expose parent-specific contributions</li>
+</ul>
+</div>
+</div>
+<div style="margin-block-end: 1rem;">
+
+</div>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="co"># clear global environment, garbage collect, and detach packages</span></span>
+<span id="cb1-2"><a href="#cb1-2"></a><span class="fu">rm</span>(<span class="at">list =</span> <span class="fu">ls</span>(<span class="at">envir =</span> .GlobalEnv), <span class="at">envir =</span> .GlobalEnv)</span>
+<span id="cb1-3"><a href="#cb1-3"></a><span class="fu">invisible</span>(<span class="fu">gc</span>(<span class="at">full =</span> <span class="cn">TRUE</span>))</span>
+<span id="cb1-4"><a href="#cb1-4"></a><span class="fu">invisible</span>(<span class="fu">lapply</span>(<span class="fu">grep</span>(<span class="st">":|autoloads|globalenv"</span>, <span class="fu">search</span>(),</span>
+<span id="cb1-5"><a href="#cb1-5"></a>  <span class="at">invert =</span> <span class="cn">TRUE</span>, <span class="at">value =</span> <span class="cn">TRUE</span>, <span class="at">ignore.case =</span> <span class="cn">TRUE</span></span>
+<span id="cb1-6"><a href="#cb1-6"></a>), detach, <span class="at">character.only =</span> <span class="cn">TRUE</span>, <span class="at">unload =</span> <span class="cn">TRUE</span>, <span class="at">force =</span> <span class="cn">TRUE</span>))</span>
+<span id="cb1-7"><a href="#cb1-7"></a></span>
+<span id="cb1-8"><a href="#cb1-8"></a><span class="co"># source custom functions</span></span>
+<span id="cb1-9"><a href="#cb1-9"></a>purrr<span class="sc">::</span><span class="fu">walk</span>(<span class="fu">file.path</span>(here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"assets"</span>, <span class="st">"functions"</span>), <span class="fu">paste0</span>(<span class="fu">c</span>(</span>
+<span id="cb1-10"><a href="#cb1-10"></a>  <span class="st">"robust_analysis"</span>, <span class="st">"standardize"</span>, <span class="st">"create_lmrob_control"</span>, <span class="st">"save_function"</span>,</span>
+<span id="cb1-11"><a href="#cb1-11"></a>  <span class="st">"named_list"</span>, <span class="st">"numeric_df"</span>, <span class="st">"set_globals"</span>, <span class="st">"import_pipes"</span>, <span class="st">"process_model"</span>,</span>
+<span id="cb1-12"><a href="#cb1-12"></a>  <span class="st">"fit_robust_model"</span>, <span class="st">"sci_to_tex"</span>, <span class="st">"prepare_model_matrices"</span>, <span class="st">"fit_models"</span></span>
+<span id="cb1-13"><a href="#cb1-13"></a>), <span class="st">".R"</span>)), source)</span>
+<span id="cb1-14"><a href="#cb1-14"></a></span>
+<span id="cb1-15"><a href="#cb1-15"></a><span class="co"># set global options and import pipe operators</span></span>
+<span id="cb1-16"><a href="#cb1-16"></a><span class="fu">set_globals</span>()</span>
+<span id="cb1-17"><a href="#cb1-17"></a><span class="fu">import_pipes</span>()</span>
+<span id="cb1-18"><a href="#cb1-18"></a></span>
+<span id="cb1-19"><a href="#cb1-19"></a><span class="co"># global recompute switch</span></span>
+<span id="cb1-20"><a href="#cb1-20"></a><span class="co"># TRUE re-runs the heavy steps; FALSE loads cached assets when they exist</span></span>
+<span id="cb1-21"><a href="#cb1-21"></a>recompute_heavy <span class="ot">&lt;-</span> <span class="cn">FALSE</span></span>
+<span id="cb1-22"><a href="#cb1-22"></a></span>
+<span id="cb1-23"><a href="#cb1-23"></a><span class="co"># define analysis type</span></span>
+<span id="cb1-24"><a href="#cb1-24"></a>type <span class="ot">&lt;-</span> <span class="st">"unadjusted"</span></span>
+<span id="cb1-25"><a href="#cb1-25"></a><span class="fu">options</span>(<span class="at">width =</span> <span class="dv">250</span>)</span>
+<span id="cb1-26"><a href="#cb1-26"></a></span>
+<span id="cb1-27"><a href="#cb1-27"></a><span class="co"># load analysis-ready dataset from step 6</span></span>
+<span id="cb1-28"><a href="#cb1-28"></a>analysis_data <span class="ot">&lt;-</span> haven<span class="sc">::</span><span class="fu">read_sav</span>(</span>
+<span id="cb1-29"><a href="#cb1-29"></a>  here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"assets"</span>, <span class="st">"data"</span>, <span class="st">"saved"</span>, <span class="st">"analysis_ready.sav"</span>)</span>
+<span id="cb1-30"><a href="#cb1-30"></a>)</span>
+<span id="cb1-31"><a href="#cb1-31"></a></span>
+<span id="cb1-32"><a href="#cb1-32"></a>models_dir <span class="ot">&lt;-</span> here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"assets"</span>, <span class="st">"models"</span>)</span>
+<span id="cb1-33"><a href="#cb1-33"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">dir.exists</span>(models_dir)) <span class="fu">dir.create</span>(models_dir, <span class="at">recursive =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb1-34"><a href="#cb1-34"></a></span>
+<span id="cb1-35"><a href="#cb1-35"></a><span class="co"># consolidated output path; cached fits are reused when this file exists</span></span>
+<span id="cb1-36"><a href="#cb1-36"></a>consolidated_path <span class="ot">&lt;-</span> <span class="fu">file.path</span>(models_dir, <span class="fu">paste0</span>(type, <span class="st">"_fits.rds"</span>))</span>
+<span id="cb1-37"><a href="#cb1-37"></a></span>
+<span id="cb1-38"><a href="#cb1-38"></a><span class="co"># refit when forced or when no cached consolidated fits exist</span></span>
+<span id="cb1-39"><a href="#cb1-39"></a>refit_models <span class="ot">&lt;-</span> recompute_heavy <span class="sc">||</span> <span class="sc">!</span><span class="fu">file.exists</span>(consolidated_path)</span>
+<span id="cb1-40"><a href="#cb1-40"></a></span>
+<span id="cb1-41"><a href="#cb1-41"></a><span class="co"># when refitting, purge only this step's outputs (stale fits and specs);</span></span>
+<span id="cb1-42"><a href="#cb1-42"></a><span class="co"># step 9 fits and step 10 caches stay intact</span></span>
+<span id="cb1-43"><a href="#cb1-43"></a><span class="cf">if</span> (refit_models) {</span>
+<span id="cb1-44"><a href="#cb1-44"></a>  <span class="fu">unlink</span>(<span class="fu">Sys.glob</span>(<span class="fu">file.path</span>(models_dir, <span class="st">"unadjusted_*"</span>)))</span>
+<span id="cb1-45"><a href="#cb1-45"></a>  <span class="fu">unlink</span>(<span class="fu">file.path</span>(models_dir, <span class="st">"models.rds"</span>))</span>
+<span id="cb1-46"><a href="#cb1-46"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<section id="verify-dataset-from-step-6" class="level2 page-columns page-full" data-number="1">
+<h2 data-number="1" class="anchored" data-anchor-id="verify-dataset-from-step-6"><span class="header-section-number">1</span> Verify Dataset from Step 6</h2>
+<p>Confirm expected variables are present before model fitting.</p>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a><span class="co"># define expected variables from step 6</span></span>
+<span id="cb2-2"><a href="#cb2-2"></a>ses_composites <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"education_parental"</span>, <span class="st">"isei08_parental"</span>)</span>
+<span id="cb2-3"><a href="#cb2-3"></a></span>
+<span id="cb2-4"><a href="#cb2-4"></a><span class="co"># partner SES (structural NA for non-partnered)</span></span>
+<span id="cb2-5"><a href="#cb2-5"></a>partner_ses <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"education_partner"</span>, <span class="st">"isei08_partner"</span>)</span>
+<span id="cb2-6"><a href="#cb2-6"></a></span>
+<span id="cb2-7"><a href="#cb2-7"></a><span class="co"># individual parent variables for disaggregated models</span></span>
+<span id="cb2-8"><a href="#cb2-8"></a>parental_disagg <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
+<span id="cb2-9"><a href="#cb2-9"></a>  <span class="st">"education_father"</span>, <span class="st">"education_mother"</span>,</span>
+<span id="cb2-10"><a href="#cb2-10"></a>  <span class="st">"isei08_father"</span>, <span class="st">"isei08_mother"</span></span>
+<span id="cb2-11"><a href="#cb2-11"></a>)</span>
+<span id="cb2-12"><a href="#cb2-12"></a></span>
+<span id="cb2-13"><a href="#cb2-13"></a><span class="co"># core regression variables</span></span>
+<span id="cb2-14"><a href="#cb2-14"></a>core_vars <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
+<span id="cb2-15"><a href="#cb2-15"></a>  <span class="st">"dhd_index"</span>, <span class="st">"woman"</span>, <span class="st">"age"</span>, <span class="st">"partner"</span>,</span>
+<span id="cb2-16"><a href="#cb2-16"></a>  <span class="st">"education_self"</span>, <span class="st">"isei08_self"</span></span>
+<span id="cb2-17"><a href="#cb2-17"></a>)</span>
+<span id="cb2-18"><a href="#cb2-18"></a></span>
+<span id="cb2-19"><a href="#cb2-19"></a><span class="co"># optional variables (may or may not be present)</span></span>
+<span id="cb2-20"><a href="#cb2-20"></a>optional_vars <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"dhd_kcal"</span>, <span class="st">"smoking"</span>, <span class="st">"income_hh"</span>)</span>
+<span id="cb2-21"><a href="#cb2-21"></a></span>
+<span id="cb2-22"><a href="#cb2-22"></a><span class="co"># check presence</span></span>
+<span id="cb2-23"><a href="#cb2-23"></a>ses_present <span class="ot">&lt;-</span> ses_composites[ses_composites <span class="sc">%in%</span> <span class="fu">names</span>(analysis_data)]</span>
+<span id="cb2-24"><a href="#cb2-24"></a>ses_missing <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(ses_composites, ses_present)</span>
+<span id="cb2-25"><a href="#cb2-25"></a>partner_present <span class="ot">&lt;-</span> partner_ses[partner_ses <span class="sc">%in%</span> <span class="fu">names</span>(analysis_data)]</span>
+<span id="cb2-26"><a href="#cb2-26"></a>partner_missing <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(partner_ses, partner_present)</span>
+<span id="cb2-27"><a href="#cb2-27"></a>parental_present <span class="ot">&lt;-</span> parental_disagg[parental_disagg <span class="sc">%in%</span> <span class="fu">names</span>(analysis_data)]</span>
+<span id="cb2-28"><a href="#cb2-28"></a>parental_missing <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(parental_disagg, parental_present)</span>
+<span id="cb2-29"><a href="#cb2-29"></a>core_present <span class="ot">&lt;-</span> core_vars[core_vars <span class="sc">%in%</span> <span class="fu">names</span>(analysis_data)]</span>
+<span id="cb2-30"><a href="#cb2-30"></a>core_missing <span class="ot">&lt;-</span> <span class="fu">setdiff</span>(core_vars, core_present)</span>
+<span id="cb2-31"><a href="#cb2-31"></a>optional_present <span class="ot">&lt;-</span> optional_vars[optional_vars <span class="sc">%in%</span> <span class="fu">names</span>(analysis_data)]</span>
+<span id="cb2-32"><a href="#cb2-32"></a></span>
+<span id="cb2-33"><a href="#cb2-33"></a><span class="co"># sample sizes</span></span>
+<span id="cb2-34"><a href="#cb2-34"></a>n_total <span class="ot">&lt;-</span> <span class="fu">nrow</span>(analysis_data)</span>
+<span id="cb2-35"><a href="#cb2-35"></a>n_partnered <span class="ot">&lt;-</span> <span class="fu">sum</span>(analysis_data<span class="sc">$</span>partner <span class="sc">==</span> <span class="dv">1</span>, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb2-36"><a href="#cb2-36"></a>n_non_partnered <span class="ot">&lt;-</span> <span class="fu">sum</span>(analysis_data<span class="sc">$</span>partner <span class="sc">==</span> <span class="dv">0</span>, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb2-37"><a href="#cb2-37"></a></span>
+<span id="cb2-38"><a href="#cb2-38"></a><span class="co"># display verification results</span></span>
+<span id="cb2-39"><a href="#cb2-39"></a>verify_msg <span class="ot">&lt;-</span> <span class="fu">glue</span>(</span>
+<span id="cb2-40"><a href="#cb2-40"></a>  <span class="st">"&lt;div class='callout-note'&gt;</span></span>
+<span id="cb2-41"><a href="#cb2-41"></a><span class="st">&lt;strong&gt;Dataset Verification (Step 6)&lt;/strong&gt;&lt;br&gt;&lt;br&gt;</span></span>
+<span id="cb2-42"><a href="#cb2-42"></a><span class="st">&lt;strong&gt;Input:&lt;/strong&gt; {n_total} observations&lt;br&gt;</span></span>
+<span id="cb2-43"><a href="#cb2-43"></a><span class="st">&lt;strong&gt;Partnered:&lt;/strong&gt; {n_partnered} ({round(100 * n_partnered / n_total, 1)}%)&lt;br&gt;</span></span>
+<span id="cb2-44"><a href="#cb2-44"></a><span class="st">&lt;strong&gt;Non-partnered:&lt;/strong&gt; {n_non_partnered} ({round(100 * n_non_partnered / n_total, 1)}%)&lt;br&gt;&lt;br&gt;</span></span>
+<span id="cb2-45"><a href="#cb2-45"></a><span class="st">&lt;strong&gt;Core variables:&lt;/strong&gt; {if (length(core_missing) == 0) 'All present &amp;#10003;' else paste('Missing:', paste(core_missing, collapse = ', '))}&lt;br&gt;</span></span>
+<span id="cb2-46"><a href="#cb2-46"></a><span class="st">&lt;strong&gt;Parental composites:&lt;/strong&gt; {if (length(ses_missing) == 0) 'All present &amp;#10003;' else paste('Missing:', paste(ses_missing, collapse = ', '))}&lt;br&gt;</span></span>
+<span id="cb2-47"><a href="#cb2-47"></a><span class="st">&lt;strong&gt;Parental disaggregated:&lt;/strong&gt; {if (length(parental_missing) == 0) 'All present &amp;#10003;' else paste('Missing:', paste(parental_missing, collapse = ', '))}&lt;br&gt;</span></span>
+<span id="cb2-48"><a href="#cb2-48"></a><span class="st">&lt;strong&gt;Partner SES:&lt;/strong&gt; {if (length(partner_missing) == 0) 'All present &amp;#10003;' else paste('Missing:', paste(partner_missing, collapse = ', '))}&lt;br&gt;</span></span>
+<span id="cb2-49"><a href="#cb2-49"></a><span class="st">&lt;strong&gt;Optional variables:&lt;/strong&gt; {if (length(optional_present) &gt; 0) paste(optional_present, collapse = ', ') else 'None'}</span></span>
+<span id="cb2-50"><a href="#cb2-50"></a><span class="st">&lt;/div&gt;"</span></span>
+<span id="cb2-51"><a href="#cb2-51"></a>)</span>
+<span id="cb2-52"><a href="#cb2-52"></a><span class="fu">cat</span>(verify_msg)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Note
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><strong>Dataset Verification (Step 6)</strong><br><br> <strong>Input:</strong> 922 observations<br> <strong>Partnered:</strong> 771 (83.6%)<br> <strong>Non-partnered:</strong> 151 (16.4%)<br><br> <strong>Core variables:</strong> All present ✓<br> <strong>Parental composites:</strong> All present ✓<br> <strong>Parental disaggregated:</strong> All present ✓<br> <strong>Partner SES:</strong> All present ✓<br> <strong>Optional variables:</strong> dhd_kcal, smoking, income_hh</p>
+</div>
+</div>
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a><span class="co"># stop if critical variables are missing</span></span>
+<span id="cb3-2"><a href="#cb3-2"></a><span class="cf">if</span> (<span class="fu">length</span>(core_missing) <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
+<span id="cb3-3"><a href="#cb3-3"></a>  <span class="fu">stop</span>(<span class="st">"Missing core variables: "</span>, <span class="fu">paste</span>(core_missing, <span class="at">collapse =</span> <span class="st">", "</span>))</span>
+<span id="cb3-4"><a href="#cb3-4"></a>}</span>
+<span id="cb3-5"><a href="#cb3-5"></a><span class="cf">if</span> (<span class="fu">length</span>(ses_missing) <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
+<span id="cb3-6"><a href="#cb3-6"></a>  <span class="fu">warning</span>(<span class="st">"Missing parental composites: "</span>, <span class="fu">paste</span>(ses_missing, <span class="at">collapse =</span> <span class="st">", "</span>))</span>
+<span id="cb3-7"><a href="#cb3-7"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="model-specifications" class="level2 page-columns page-full" data-number="2">
+<h2 data-number="2" class="anchored" data-anchor-id="model-specifications"><span class="header-section-number">2</span> Model Specifications</h2>
+<section id="model-0-null-model" class="level3 page-columns page-full" data-number="2.1">
+<h3 data-number="2.1" class="anchored" data-anchor-id="model-0-null-model"><span class="header-section-number">2.1</span> Model 0: Null Model</h3>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a>model_0 <span class="ot">&lt;-</span> dhd_index <span class="sc">~</span> <span class="dv">1</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="model-1-adult-covariates-and-own-ses-adjustment-set" class="level3 page-columns page-full" data-number="2.2">
+<h3 data-number="2.2" class="anchored" data-anchor-id="model-1-adult-covariates-and-own-ses-adjustment-set"><span class="header-section-number">2.2</span> Model 1: Adult Covariates and Own SES (Adjustment Set)</h3>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a><span class="co"># base model: demographics + lifestyle + own SES</span></span>
+<span id="cb5-2"><a href="#cb5-2"></a>base_formula <span class="ot">&lt;-</span> dhd_index <span class="sc">~</span> woman <span class="sc">+</span> age <span class="sc">+</span> partner <span class="sc">+</span></span>
+<span id="cb5-3"><a href="#cb5-3"></a>  education_self <span class="sc">+</span> isei08_self</span>
+<span id="cb5-4"><a href="#cb5-4"></a></span>
+<span id="cb5-5"><a href="#cb5-5"></a><span class="co"># nutritional-epidemiology covariate: total energy intake</span></span>
+<span id="cb5-6"><a href="#cb5-6"></a><span class="cf">if</span> (<span class="st">"dhd_kcal"</span> <span class="sc">%in%</span> <span class="fu">names</span>(analysis_data)) {</span>
+<span id="cb5-7"><a href="#cb5-7"></a>  base_formula <span class="ot">&lt;-</span> <span class="fu">update</span>(base_formula, . <span class="sc">~</span> . <span class="sc">+</span> dhd_kcal)</span>
+<span id="cb5-8"><a href="#cb5-8"></a>}</span>
+<span id="cb5-9"><a href="#cb5-9"></a><span class="co"># lifestyle covariate: smoking status</span></span>
+<span id="cb5-10"><a href="#cb5-10"></a><span class="cf">if</span> (<span class="st">"smoking"</span> <span class="sc">%in%</span> <span class="fu">names</span>(analysis_data)) {</span>
+<span id="cb5-11"><a href="#cb5-11"></a>  base_formula <span class="ot">&lt;-</span> <span class="fu">update</span>(base_formula, . <span class="sc">~</span> . <span class="sc">+</span> smoking)</span>
+<span id="cb5-12"><a href="#cb5-12"></a>}</span>
+<span id="cb5-13"><a href="#cb5-13"></a><span class="co"># household economics (optional, conditional on availability)</span></span>
+<span id="cb5-14"><a href="#cb5-14"></a><span class="cf">if</span> (<span class="st">"income_hh"</span> <span class="sc">%in%</span> <span class="fu">names</span>(analysis_data)) {</span>
+<span id="cb5-15"><a href="#cb5-15"></a>  base_formula <span class="ot">&lt;-</span> <span class="fu">update</span>(base_formula, . <span class="sc">~</span> . <span class="sc">+</span> income_hh)</span>
+<span id="cb5-16"><a href="#cb5-16"></a>}</span>
+<span id="cb5-17"><a href="#cb5-17"></a></span>
+<span id="cb5-18"><a href="#cb5-18"></a>model_1 <span class="ot">&lt;-</span> base_formula</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+</section>
+<section id="composite-ses-models-models-26" class="level2 page-columns page-full" data-number="3">
+<h2 data-number="3" class="anchored" data-anchor-id="composite-ses-models-models-26"><span class="header-section-number">3</span> Composite SES Models (Models 2–6)</h2>
+<p>These models use parental composites that average mother and father within education and occupation domains.</p>
+<section id="model-2-add-parental-ses-main-effects-h1-rq1" class="level3 page-columns page-full" data-number="3.1">
+<h3 data-number="3.1" class="anchored" data-anchor-id="model-2-add-parental-ses-main-effects-h1-rq1"><span class="header-section-number">3.1</span> Model 2: Add Parental SES Main Effects (H1, RQ1)</h3>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a>model_2 <span class="ot">&lt;-</span> <span class="fu">update</span>(model_1, . <span class="sc">~</span> . <span class="sc">+</span></span>
+<span id="cb6-2"><a href="#cb6-2"></a>  education_parental <span class="sc">+</span></span>
+<span id="cb6-3"><a href="#cb6-3"></a>  isei08_parental)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="model-3-add-partner-ses-main-effects-h2-rq2" class="level3 page-columns page-full" data-number="3.2">
+<h3 data-number="3.2" class="anchored" data-anchor-id="model-3-add-partner-ses-main-effects-h2-rq2"><span class="header-section-number">3.2</span> Model 3: Add Partner SES Main Effects (H2, RQ2)</h3>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1"></a>model_3 <span class="ot">&lt;-</span> <span class="fu">update</span>(model_2, . <span class="sc">~</span> . <span class="sc">+</span></span>
+<span id="cb7-2"><a href="#cb7-2"></a>  education_partner<span class="sc">:</span>partner <span class="sc">+</span></span>
+<span id="cb7-3"><a href="#cb7-3"></a>  isei08_partner<span class="sc">:</span>partner)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="model-4-gender-moderation-of-parental-and-partner-ses-h3-h4-rq3" class="level3 page-columns page-full" data-number="3.3">
+<h3 data-number="3.3" class="anchored" data-anchor-id="model-4-gender-moderation-of-parental-and-partner-ses-h3-h4-rq3"><span class="header-section-number">3.3</span> Model 4: Gender Moderation of Parental and Partner SES (H3, H4, RQ3)</h3>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a>model_4 <span class="ot">&lt;-</span> <span class="fu">update</span>(model_3, . <span class="sc">~</span> . <span class="sc">+</span></span>
+<span id="cb8-2"><a href="#cb8-2"></a>  woman<span class="sc">:</span>education_parental <span class="sc">+</span></span>
+<span id="cb8-3"><a href="#cb8-3"></a>  woman<span class="sc">:</span>isei08_parental <span class="sc">+</span></span>
+<span id="cb8-4"><a href="#cb8-4"></a>  woman<span class="sc">:</span>education_partner<span class="sc">:</span>partner <span class="sc">+</span></span>
+<span id="cb8-5"><a href="#cb8-5"></a>  woman<span class="sc">:</span>isei08_partner<span class="sc">:</span>partner)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="model-5-parental-partner-ses-synergy-h5-rq4" class="level3 page-columns page-full" data-number="3.4">
+<h3 data-number="3.4" class="anchored" data-anchor-id="model-5-parental-partner-ses-synergy-h5-rq4"><span class="header-section-number">3.4</span> Model 5: Parental × Partner SES Synergy (H5, RQ4)</h3>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1"></a>model_5 <span class="ot">&lt;-</span> <span class="fu">update</span>(model_4, . <span class="sc">~</span> . <span class="sc">+</span></span>
+<span id="cb9-2"><a href="#cb9-2"></a>  education_parental<span class="sc">:</span>education_partner<span class="sc">:</span>partner <span class="sc">+</span></span>
+<span id="cb9-3"><a href="#cb9-3"></a>  isei08_parental<span class="sc">:</span>isei08_partner<span class="sc">:</span>partner)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="model-6-gender-moderation-of-synergy-h6-rq4" class="level3 page-columns page-full" data-number="3.5">
+<h3 data-number="3.5" class="anchored" data-anchor-id="model-6-gender-moderation-of-synergy-h6-rq4"><span class="header-section-number">3.5</span> Model 6: Gender Moderation of Synergy (H6, RQ4)</h3>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a>model_6 <span class="ot">&lt;-</span> <span class="fu">update</span>(model_5, . <span class="sc">~</span> . <span class="sc">+</span></span>
+<span id="cb10-2"><a href="#cb10-2"></a>  woman<span class="sc">:</span>education_parental<span class="sc">:</span>education_partner<span class="sc">:</span>partner <span class="sc">+</span></span>
+<span id="cb10-3"><a href="#cb10-3"></a>  woman<span class="sc">:</span>isei08_parental<span class="sc">:</span>isei08_partner<span class="sc">:</span>partner)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+</section>
+<section id="disaggregated-ses-models-models-711" class="level2 page-columns page-full" data-number="4">
+<h2 data-number="4" class="anchored" data-anchor-id="disaggregated-ses-models-models-711"><span class="header-section-number">4</span> Disaggregated SES Models (Models 7–11)</h2>
+<p>These models use separate variables for mother, father, and partner education and occupation.</p>
+<section id="model-7-mother-and-father-ses-main-effects-h1-rq1" class="level3 page-columns page-full" data-number="4.1">
+<h3 data-number="4.1" class="anchored" data-anchor-id="model-7-mother-and-father-ses-main-effects-h1-rq1"><span class="header-section-number">4.1</span> Model 7: Mother and Father SES Main Effects (H1, RQ1)</h3>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a>model_7 <span class="ot">&lt;-</span> <span class="fu">update</span>(model_1, . <span class="sc">~</span> . <span class="sc">+</span></span>
+<span id="cb11-2"><a href="#cb11-2"></a>  education_mother <span class="sc">+</span></span>
+<span id="cb11-3"><a href="#cb11-3"></a>  education_father <span class="sc">+</span></span>
+<span id="cb11-4"><a href="#cb11-4"></a>  isei08_mother <span class="sc">+</span></span>
+<span id="cb11-5"><a href="#cb11-5"></a>  isei08_father)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="model-8-add-partner-ses-main-effects-h2-rq2" class="level3 page-columns page-full" data-number="4.2">
+<h3 data-number="4.2" class="anchored" data-anchor-id="model-8-add-partner-ses-main-effects-h2-rq2"><span class="header-section-number">4.2</span> Model 8: Add Partner SES Main Effects (H2, RQ2)</h3>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1"></a>model_8 <span class="ot">&lt;-</span> <span class="fu">update</span>(model_7, . <span class="sc">~</span> . <span class="sc">+</span></span>
+<span id="cb12-2"><a href="#cb12-2"></a>  education_partner<span class="sc">:</span>partner <span class="sc">+</span></span>
+<span id="cb12-3"><a href="#cb12-3"></a>  isei08_partner<span class="sc">:</span>partner)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="model-9-gender-motherfatherpartner-ses-interactions-h3-h4-rq3" class="level3 page-columns page-full" data-number="4.3">
+<h3 data-number="4.3" class="anchored" data-anchor-id="model-9-gender-motherfatherpartner-ses-interactions-h3-h4-rq3"><span class="header-section-number">4.3</span> Model 9: Gender × Mother/Father/Partner SES Interactions (H3, H4, RQ3)</h3>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1"></a>model_9 <span class="ot">&lt;-</span> <span class="fu">update</span>(model_8, . <span class="sc">~</span> . <span class="sc">+</span></span>
+<span id="cb13-2"><a href="#cb13-2"></a>  woman<span class="sc">:</span>education_mother <span class="sc">+</span></span>
+<span id="cb13-3"><a href="#cb13-3"></a>  woman<span class="sc">:</span>education_father <span class="sc">+</span></span>
+<span id="cb13-4"><a href="#cb13-4"></a>  woman<span class="sc">:</span>isei08_mother <span class="sc">+</span></span>
+<span id="cb13-5"><a href="#cb13-5"></a>  woman<span class="sc">:</span>isei08_father <span class="sc">+</span></span>
+<span id="cb13-6"><a href="#cb13-6"></a>  woman<span class="sc">:</span>education_partner<span class="sc">:</span>partner <span class="sc">+</span></span>
+<span id="cb13-7"><a href="#cb13-7"></a>  woman<span class="sc">:</span>isei08_partner<span class="sc">:</span>partner)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="model-10-mother-partner-and-father-partner-synergy-h5-rq4" class="level3 page-columns page-full" data-number="4.4">
+<h3 data-number="4.4" class="anchored" data-anchor-id="model-10-mother-partner-and-father-partner-synergy-h5-rq4"><span class="header-section-number">4.4</span> Model 10: Mother × Partner and Father × Partner Synergy (H5, RQ4)</h3>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1"></a>model_10 <span class="ot">&lt;-</span> <span class="fu">update</span>(model_9, . <span class="sc">~</span> . <span class="sc">+</span></span>
+<span id="cb14-2"><a href="#cb14-2"></a>  education_mother<span class="sc">:</span>education_partner<span class="sc">:</span>partner <span class="sc">+</span></span>
+<span id="cb14-3"><a href="#cb14-3"></a>  education_father<span class="sc">:</span>education_partner<span class="sc">:</span>partner <span class="sc">+</span></span>
+<span id="cb14-4"><a href="#cb14-4"></a>  isei08_mother<span class="sc">:</span>isei08_partner<span class="sc">:</span>partner <span class="sc">+</span></span>
+<span id="cb14-5"><a href="#cb14-5"></a>  isei08_father<span class="sc">:</span>isei08_partner<span class="sc">:</span>partner)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="model-11-gender-parent-specific-synergy-h6-rq4" class="level3 page-columns page-full" data-number="4.5">
+<h3 data-number="4.5" class="anchored" data-anchor-id="model-11-gender-parent-specific-synergy-h6-rq4"><span class="header-section-number">4.5</span> Model 11: Gender × Parent-Specific Synergy (H6, RQ4)</h3>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1"></a>model_11 <span class="ot">&lt;-</span> <span class="fu">update</span>(model_10, . <span class="sc">~</span> . <span class="sc">+</span></span>
+<span id="cb15-2"><a href="#cb15-2"></a>  woman<span class="sc">:</span>education_mother<span class="sc">:</span>education_partner<span class="sc">:</span>partner <span class="sc">+</span></span>
+<span id="cb15-3"><a href="#cb15-3"></a>  woman<span class="sc">:</span>education_father<span class="sc">:</span>education_partner<span class="sc">:</span>partner <span class="sc">+</span></span>
+<span id="cb15-4"><a href="#cb15-4"></a>  woman<span class="sc">:</span>isei08_mother<span class="sc">:</span>isei08_partner<span class="sc">:</span>partner <span class="sc">+</span></span>
+<span id="cb15-5"><a href="#cb15-5"></a>  woman<span class="sc">:</span>isei08_father<span class="sc">:</span>isei08_partner<span class="sc">:</span>partner)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+</section>
+<section id="prepare-data-for-model-fitting" class="level2 page-columns page-full" data-number="5">
+<h2 data-number="5" class="anchored" data-anchor-id="prepare-data-for-model-fitting"><span class="header-section-number">5</span> Prepare Data for Model Fitting</h2>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1"></a><span class="co"># collect model objects in numeric order</span></span>
+<span id="cb16-2"><a href="#cb16-2"></a>model_names <span class="ot">&lt;-</span> <span class="fu">ls</span>(<span class="at">pattern =</span> <span class="st">"^model_[0-9]+$"</span>)</span>
+<span id="cb16-3"><a href="#cb16-3"></a>model_names <span class="ot">&lt;-</span> model_names[<span class="fu">order</span>(<span class="fu">as.integer</span>(<span class="fu">sub</span>(<span class="st">"model_"</span>, <span class="st">""</span>, model_names)))]</span>
+<span id="cb16-4"><a href="#cb16-4"></a>models <span class="ot">&lt;-</span> <span class="fu">lapply</span>(model_names, <span class="cf">function</span>(nm) <span class="fu">get</span>(nm, <span class="at">envir =</span> .GlobalEnv))</span>
+<span id="cb16-5"><a href="#cb16-5"></a><span class="fu">names</span>(models) <span class="ot">&lt;-</span> model_names</span>
+<span id="cb16-6"><a href="#cb16-6"></a></span>
+<span id="cb16-7"><a href="#cb16-7"></a><span class="co"># save model specifications</span></span>
+<span id="cb16-8"><a href="#cb16-8"></a><span class="fu">saveRDS</span>(models, <span class="at">file =</span> <span class="fu">file.path</span>(models_dir, <span class="st">"models.rds"</span>))</span>
+<span id="cb16-9"><a href="#cb16-9"></a></span>
+<span id="cb16-10"><a href="#cb16-10"></a><span class="co"># prepare analysis data</span></span>
+<span id="cb16-11"><a href="#cb16-11"></a>unadjusted_data <span class="ot">&lt;-</span> <span class="fu">numeric_df</span>(analysis_data) <span class="sc">%&gt;%</span></span>
+<span id="cb16-12"><a href="#cb16-12"></a>  dplyr<span class="sc">::</span><span class="fu">mutate</span>(</span>
+<span id="cb16-13"><a href="#cb16-13"></a>    <span class="co"># ensure partner is numeric binary</span></span>
+<span id="cb16-14"><a href="#cb16-14"></a>    <span class="at">partner =</span> <span class="fu">as.numeric</span>(partner <span class="sc">==</span> <span class="dv">1</span>),</span>
+<span id="cb16-15"><a href="#cb16-15"></a></span>
+<span id="cb16-16"><a href="#cb16-16"></a>    <span class="co"># condition partner SES on having a partner (set to 0 for non-partnered)</span></span>
+<span id="cb16-17"><a href="#cb16-17"></a>    <span class="at">education_partner =</span> dplyr<span class="sc">::</span><span class="fu">if_else</span>(partner <span class="sc">==</span> <span class="dv">0</span>, <span class="dv">0</span>, education_partner),</span>
+<span id="cb16-18"><a href="#cb16-18"></a>    <span class="at">isei08_partner =</span> dplyr<span class="sc">::</span><span class="fu">if_else</span>(partner <span class="sc">==</span> <span class="dv">0</span>, <span class="dv">0</span>, isei08_partner)</span>
+<span id="cb16-19"><a href="#cb16-19"></a>  )</span>
+<span id="cb16-20"><a href="#cb16-20"></a></span>
+<span id="cb16-21"><a href="#cb16-21"></a><span class="co"># identify variables used in models</span></span>
+<span id="cb16-22"><a href="#cb16-22"></a>vars_in_models <span class="ot">&lt;-</span> <span class="fu">unique</span>(<span class="fu">unlist</span>(<span class="fu">lapply</span>(models, <span class="cf">function</span>(m) {</span>
+<span id="cb16-23"><a href="#cb16-23"></a>  <span class="fu">as.character</span>(<span class="fu">attr</span>(stats<span class="sc">::</span><span class="fu">terms</span>(m), <span class="st">"variables"</span>))[<span class="sc">-</span><span class="dv">1</span>]</span>
+<span id="cb16-24"><a href="#cb16-24"></a>})))</span>
+<span id="cb16-25"><a href="#cb16-25"></a></span>
+<span id="cb16-26"><a href="#cb16-26"></a><span class="co"># define analysis variable set</span></span>
+<span id="cb16-27"><a href="#cb16-27"></a>analysis_vars <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
+<span id="cb16-28"><a href="#cb16-28"></a>  <span class="st">"dhd_index"</span>,</span>
+<span id="cb16-29"><a href="#cb16-29"></a>  <span class="co"># parental composites</span></span>
+<span id="cb16-30"><a href="#cb16-30"></a>  <span class="st">"education_parental"</span>, <span class="st">"isei08_parental"</span>,</span>
+<span id="cb16-31"><a href="#cb16-31"></a>  <span class="co"># disaggregated parental</span></span>
+<span id="cb16-32"><a href="#cb16-32"></a>  <span class="st">"education_father"</span>, <span class="st">"education_mother"</span>,</span>
+<span id="cb16-33"><a href="#cb16-33"></a>  <span class="st">"isei08_father"</span>, <span class="st">"isei08_mother"</span>,</span>
+<span id="cb16-34"><a href="#cb16-34"></a>  <span class="co"># partner</span></span>
+<span id="cb16-35"><a href="#cb16-35"></a>  <span class="st">"education_partner"</span>, <span class="st">"isei08_partner"</span>,</span>
+<span id="cb16-36"><a href="#cb16-36"></a>  <span class="co"># own SES</span></span>
+<span id="cb16-37"><a href="#cb16-37"></a>  <span class="st">"education_self"</span>, <span class="st">"isei08_self"</span>,</span>
+<span id="cb16-38"><a href="#cb16-38"></a>  <span class="co"># demographics</span></span>
+<span id="cb16-39"><a href="#cb16-39"></a>  <span class="st">"partner"</span>, <span class="st">"woman"</span>, <span class="st">"age"</span></span>
+<span id="cb16-40"><a href="#cb16-40"></a>)</span>
+<span id="cb16-41"><a href="#cb16-41"></a></span>
+<span id="cb16-42"><a href="#cb16-42"></a><span class="co"># add optional covariates if present</span></span>
+<span id="cb16-43"><a href="#cb16-43"></a><span class="cf">if</span> (<span class="st">"dhd_kcal"</span> <span class="sc">%in%</span> <span class="fu">names</span>(unadjusted_data)) {</span>
+<span id="cb16-44"><a href="#cb16-44"></a>  analysis_vars <span class="ot">&lt;-</span> <span class="fu">c</span>(analysis_vars, <span class="st">"dhd_kcal"</span>)</span>
+<span id="cb16-45"><a href="#cb16-45"></a>}</span>
+<span id="cb16-46"><a href="#cb16-46"></a><span class="cf">if</span> (<span class="st">"smoking"</span> <span class="sc">%in%</span> <span class="fu">names</span>(unadjusted_data)) {</span>
+<span id="cb16-47"><a href="#cb16-47"></a>  analysis_vars <span class="ot">&lt;-</span> <span class="fu">c</span>(analysis_vars, <span class="st">"smoking"</span>)</span>
+<span id="cb16-48"><a href="#cb16-48"></a>}</span>
+<span id="cb16-49"><a href="#cb16-49"></a><span class="cf">if</span> (<span class="st">"income_hh"</span> <span class="sc">%in%</span> <span class="fu">names</span>(unadjusted_data)) {</span>
+<span id="cb16-50"><a href="#cb16-50"></a>  analysis_vars <span class="ot">&lt;-</span> <span class="fu">c</span>(analysis_vars, <span class="st">"income_hh"</span>)</span>
+<span id="cb16-51"><a href="#cb16-51"></a>}</span>
+<span id="cb16-52"><a href="#cb16-52"></a></span>
+<span id="cb16-53"><a href="#cb16-53"></a>vars_keep <span class="ot">&lt;-</span> <span class="fu">unique</span>(<span class="fu">c</span>(vars_in_models, analysis_vars))</span>
+<span id="cb16-54"><a href="#cb16-54"></a>vars_keep <span class="ot">&lt;-</span> <span class="fu">intersect</span>(vars_keep, <span class="fu">names</span>(unadjusted_data))</span>
+<span id="cb16-55"><a href="#cb16-55"></a></span>
+<span id="cb16-56"><a href="#cb16-56"></a>unadjusted_data <span class="ot">&lt;-</span> unadjusted_data[vars_keep]</span>
+<span id="cb16-57"><a href="#cb16-57"></a></span>
+<span id="cb16-58"><a href="#cb16-58"></a><span class="co"># save preprocessed dataset</span></span>
+<span id="cb16-59"><a href="#cb16-59"></a><span class="fu">saveRDS</span>(unadjusted_data, <span class="at">file =</span> here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"assets"</span>, <span class="st">"data"</span>, <span class="st">"saved"</span>, <span class="st">"unadjusted_data.rds"</span>))</span>
+<span id="cb16-60"><a href="#cb16-60"></a></span>
+<span id="cb16-61"><a href="#cb16-61"></a><span class="co"># disable bootstrapping for baseline fits</span></span>
+<span id="cb16-62"><a href="#cb16-62"></a>n_bootstraps <span class="ot">&lt;-</span> <span class="dv">0</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div class="cell column-body-outset-right">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1"></a>data_msg <span class="ot">&lt;-</span> <span class="fu">glue</span>(</span>
+<span id="cb17-2"><a href="#cb17-2"></a>  <span class="st">"&lt;div class='callout-note'&gt;</span></span>
+<span id="cb17-3"><a href="#cb17-3"></a><span class="st">&lt;strong&gt;Analysis Dataset Prepared&lt;/strong&gt;&lt;br&gt;&lt;br&gt;</span></span>
+<span id="cb17-4"><a href="#cb17-4"></a><span class="st">&lt;strong&gt;Observations:&lt;/strong&gt; {nrow(unadjusted_data)}&lt;br&gt;</span></span>
+<span id="cb17-5"><a href="#cb17-5"></a><span class="st">&lt;strong&gt;Variables retained:&lt;/strong&gt; {ncol(unadjusted_data)}&lt;br&gt;</span></span>
+<span id="cb17-6"><a href="#cb17-6"></a><span class="st">&lt;strong&gt;Models specified:&lt;/strong&gt; {length(models)} (Models 0-{length(models) - 1})&lt;br&gt;</span></span>
+<span id="cb17-7"><a href="#cb17-7"></a><span class="st">&lt;strong&gt;Bootstrap iterations:&lt;/strong&gt; {n_bootstraps} (disabled for baseline)&lt;br&gt;&lt;br&gt;</span></span>
+<span id="cb17-8"><a href="#cb17-8"></a><span class="st">&lt;strong&gt;Parental composites:&lt;/strong&gt; &lt;code&gt;education_parental&lt;/code&gt;, &lt;code&gt;isei08_parental&lt;/code&gt;&lt;br&gt;</span></span>
+<span id="cb17-9"><a href="#cb17-9"></a><span class="st">&lt;strong&gt;Disaggregated parental:&lt;/strong&gt; &lt;code&gt;education_mother&lt;/code&gt;, &lt;code&gt;education_father&lt;/code&gt;, &lt;code&gt;isei08_mother&lt;/code&gt;, &lt;code&gt;isei08_father&lt;/code&gt;&lt;br&gt;</span></span>
+<span id="cb17-10"><a href="#cb17-10"></a><span class="st">&lt;strong&gt;Partner SES:&lt;/strong&gt; &lt;code&gt;education_partner&lt;/code&gt;, &lt;code&gt;isei08_partner&lt;/code&gt;</span></span>
+<span id="cb17-11"><a href="#cb17-11"></a><span class="st">&lt;/div&gt;"</span></span>
+<span id="cb17-12"><a href="#cb17-12"></a>)</span>
+<span id="cb17-13"><a href="#cb17-13"></a><span class="fu">cat</span>(data_msg)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Note
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><strong>Analysis Dataset Prepared</strong><br><br> <strong>Observations:</strong> 922<br> <strong>Variables retained:</strong> 17<br> <strong>Models specified:</strong> 12 (Models 0-11)<br> <strong>Bootstrap iterations:</strong> 0 (disabled for baseline)<br><br> <strong>Parental composites:</strong> <code>education_parental</code>, <code>isei08_parental</code><br> <strong>Disaggregated parental:</strong> <code>education_mother</code>, <code>education_father</code>, <code>isei08_mother</code>, <code>isei08_father</code><br> <strong>Partner SES:</strong> <code>education_partner</code>, <code>isei08_partner</code></p>
+</div>
+</div>
+</div>
+</section>
+<section id="fit-regression-models" class="level2 page-columns page-full" data-number="6">
+<h2 data-number="6" class="anchored" data-anchor-id="fit-regression-models"><span class="header-section-number">6</span> Fit Regression Models</h2>
+<section id="fit-model-0-null-model-baseline" class="level3 page-columns page-full" data-number="6.1">
+<h3 data-number="6.1" class="anchored" data-anchor-id="fit-model-0-null-model-baseline"><span class="header-section-number">6.1</span> Fit Model 0: Null Model (Baseline)</h3>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1"></a>fit_0 <span class="ot">&lt;-</span> <span class="fu">robust_analysis</span>(</span>
+<span id="cb18-2"><a href="#cb18-2"></a>  <span class="at">data =</span> <span class="fu">get</span>(<span class="fu">glue</span>(<span class="st">"{type}_data"</span>)),</span>
+<span id="cb18-3"><a href="#cb18-3"></a>  <span class="at">form =</span> model_0,</span>
+<span id="cb18-4"><a href="#cb18-4"></a>  <span class="at">n_boots =</span> n_bootstraps,</span>
+<span id="cb18-5"><a href="#cb18-5"></a>  <span class="at">pct =</span> <span class="fl">0.95</span>,</span>
+<span id="cb18-6"><a href="#cb18-6"></a>  <span class="at">alpha =</span> <span class="fl">0.05</span>,</span>
+<span id="cb18-7"><a href="#cb18-7"></a>  <span class="at">delta =</span> <span class="fl">0.01</span>,</span>
+<span id="cb18-8"><a href="#cb18-8"></a>  <span class="at">ctrl =</span> <span class="cn">NULL</span>,</span>
+<span id="cb18-9"><a href="#cb18-9"></a>  <span class="at">seed =</span> <span class="dv">625</span>,</span>
+<span id="cb18-10"><a href="#cb18-10"></a>  <span class="at">psi =</span> <span class="st">"bisquare"</span>,</span>
+<span id="cb18-11"><a href="#cb18-11"></a>  <span class="at">std_data =</span> <span class="cn">TRUE</span></span>
+<span id="cb18-12"><a href="#cb18-12"></a>)</span>
+<span id="cb18-13"><a href="#cb18-13"></a></span>
+<span id="cb18-14"><a href="#cb18-14"></a><span class="fu">saveRDS</span>(fit_0, <span class="at">file =</span> <span class="fu">file.path</span>(models_dir, <span class="fu">glue</span>(<span class="st">"{type}_fit_0.rds"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="fit-model-1-adult-covariates-and-own-ses-baseline" class="level3 page-columns page-full" data-number="6.2">
+<h3 data-number="6.2" class="anchored" data-anchor-id="fit-model-1-adult-covariates-and-own-ses-baseline"><span class="header-section-number">6.2</span> Fit Model 1: Adult Covariates and Own SES (Baseline)</h3>
+<div class="cell column-page-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1"></a>fit_1 <span class="ot">&lt;-</span> <span class="fu">robust_analysis</span>(</span>
+<span id="cb19-2"><a href="#cb19-2"></a>  <span class="at">data =</span> <span class="fu">get</span>(<span class="fu">glue</span>(<span class="st">"{type}_data"</span>)),</span>
+<span id="cb19-3"><a href="#cb19-3"></a>  <span class="at">form =</span> model_1,</span>
+<span id="cb19-4"><a href="#cb19-4"></a>  <span class="at">n_boots =</span> n_bootstraps,</span>
+<span id="cb19-5"><a href="#cb19-5"></a>  <span class="at">pct =</span> <span class="fl">0.95</span>,</span>
+<span id="cb19-6"><a href="#cb19-6"></a>  <span class="at">alpha =</span> <span class="fl">0.05</span>,</span>
+<span id="cb19-7"><a href="#cb19-7"></a>  <span class="at">delta =</span> <span class="fl">0.01</span>,</span>
+<span id="cb19-8"><a href="#cb19-8"></a>  <span class="at">ctrl =</span> <span class="cn">NULL</span>,</span>
+<span id="cb19-9"><a href="#cb19-9"></a>  <span class="at">seed =</span> <span class="dv">625</span>,</span>
+<span id="cb19-10"><a href="#cb19-10"></a>  <span class="at">psi =</span> <span class="st">"bisquare"</span>,</span>
+<span id="cb19-11"><a href="#cb19-11"></a>  <span class="at">std_data =</span> <span class="cn">TRUE</span></span>
+<span id="cb19-12"><a href="#cb19-12"></a>)</span>
+<span id="cb19-13"><a href="#cb19-13"></a></span>
+<span id="cb19-14"><a href="#cb19-14"></a><span class="fu">saveRDS</span>(fit_1, <span class="at">file =</span> <span class="fu">file.path</span>(models_dir, <span class="fu">glue</span>(<span class="st">"{type}_fit_1.rds"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="fit-model-2-parental-ses-main-effects-composite-h1-rq1" class="level3 page-columns page-full" data-number="6.3">
+<h3 data-number="6.3" class="anchored" data-anchor-id="fit-model-2-parental-ses-main-effects-composite-h1-rq1"><span class="header-section-number">6.3</span> Fit Model 2: Parental SES Main Effects, Composite (H1, RQ1)</h3>
+<div class="cell column-page-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1"></a>fit_2 <span class="ot">&lt;-</span> <span class="fu">robust_analysis</span>(</span>
+<span id="cb20-2"><a href="#cb20-2"></a>  <span class="at">data =</span> <span class="fu">get</span>(<span class="fu">glue</span>(<span class="st">"{type}_data"</span>)),</span>
+<span id="cb20-3"><a href="#cb20-3"></a>  <span class="at">form =</span> model_2,</span>
+<span id="cb20-4"><a href="#cb20-4"></a>  <span class="at">n_boots =</span> n_bootstraps,</span>
+<span id="cb20-5"><a href="#cb20-5"></a>  <span class="at">pct =</span> <span class="fl">0.95</span>,</span>
+<span id="cb20-6"><a href="#cb20-6"></a>  <span class="at">alpha =</span> <span class="fl">0.05</span>,</span>
+<span id="cb20-7"><a href="#cb20-7"></a>  <span class="at">delta =</span> <span class="fl">0.01</span>,</span>
+<span id="cb20-8"><a href="#cb20-8"></a>  <span class="at">ctrl =</span> <span class="cn">NULL</span>,</span>
+<span id="cb20-9"><a href="#cb20-9"></a>  <span class="at">seed =</span> <span class="dv">625</span>,</span>
+<span id="cb20-10"><a href="#cb20-10"></a>  <span class="at">psi =</span> <span class="st">"bisquare"</span>,</span>
+<span id="cb20-11"><a href="#cb20-11"></a>  <span class="at">std_data =</span> <span class="cn">TRUE</span></span>
+<span id="cb20-12"><a href="#cb20-12"></a>)</span>
+<span id="cb20-13"><a href="#cb20-13"></a></span>
+<span id="cb20-14"><a href="#cb20-14"></a><span class="fu">saveRDS</span>(fit_2, <span class="at">file =</span> <span class="fu">file.path</span>(models_dir, <span class="fu">glue</span>(<span class="st">"{type}_fit_2.rds"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="fit-model-3-partner-ses-main-effects-composite-h2-rq2" class="level3 page-columns page-full" data-number="6.4">
+<h3 data-number="6.4" class="anchored" data-anchor-id="fit-model-3-partner-ses-main-effects-composite-h2-rq2"><span class="header-section-number">6.4</span> Fit Model 3: Partner SES Main Effects, Composite (H2, RQ2)</h3>
+<div class="cell column-page-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1"></a>fit_3 <span class="ot">&lt;-</span> <span class="fu">robust_analysis</span>(</span>
+<span id="cb21-2"><a href="#cb21-2"></a>  <span class="at">data =</span> <span class="fu">get</span>(<span class="fu">glue</span>(<span class="st">"{type}_data"</span>)),</span>
+<span id="cb21-3"><a href="#cb21-3"></a>  <span class="at">form =</span> model_3,</span>
+<span id="cb21-4"><a href="#cb21-4"></a>  <span class="at">n_boots =</span> n_bootstraps,</span>
+<span id="cb21-5"><a href="#cb21-5"></a>  <span class="at">pct =</span> <span class="fl">0.95</span>,</span>
+<span id="cb21-6"><a href="#cb21-6"></a>  <span class="at">alpha =</span> <span class="fl">0.05</span>,</span>
+<span id="cb21-7"><a href="#cb21-7"></a>  <span class="at">delta =</span> <span class="fl">0.01</span>,</span>
+<span id="cb21-8"><a href="#cb21-8"></a>  <span class="at">ctrl =</span> <span class="cn">NULL</span>,</span>
+<span id="cb21-9"><a href="#cb21-9"></a>  <span class="at">seed =</span> <span class="dv">625</span>,</span>
+<span id="cb21-10"><a href="#cb21-10"></a>  <span class="at">psi =</span> <span class="st">"bisquare"</span>,</span>
+<span id="cb21-11"><a href="#cb21-11"></a>  <span class="at">std_data =</span> <span class="cn">TRUE</span></span>
+<span id="cb21-12"><a href="#cb21-12"></a>)</span>
+<span id="cb21-13"><a href="#cb21-13"></a></span>
+<span id="cb21-14"><a href="#cb21-14"></a><span class="fu">saveRDS</span>(fit_3, <span class="at">file =</span> <span class="fu">file.path</span>(models_dir, <span class="fu">glue</span>(<span class="st">"{type}_fit_3.rds"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="fit-model-4-gender-moderation-of-ses-composite-h3-h4-rq3" class="level3 page-columns page-full" data-number="6.5">
+<h3 data-number="6.5" class="anchored" data-anchor-id="fit-model-4-gender-moderation-of-ses-composite-h3-h4-rq3"><span class="header-section-number">6.5</span> Fit Model 4: Gender Moderation of SES, Composite (H3, H4, RQ3)</h3>
+<div class="cell column-page-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1"></a>fit_4 <span class="ot">&lt;-</span> <span class="fu">robust_analysis</span>(</span>
+<span id="cb22-2"><a href="#cb22-2"></a>  <span class="at">data =</span> <span class="fu">get</span>(<span class="fu">glue</span>(<span class="st">"{type}_data"</span>)),</span>
+<span id="cb22-3"><a href="#cb22-3"></a>  <span class="at">form =</span> model_4,</span>
+<span id="cb22-4"><a href="#cb22-4"></a>  <span class="at">n_boots =</span> n_bootstraps,</span>
+<span id="cb22-5"><a href="#cb22-5"></a>  <span class="at">pct =</span> <span class="fl">0.95</span>,</span>
+<span id="cb22-6"><a href="#cb22-6"></a>  <span class="at">alpha =</span> <span class="fl">0.05</span>,</span>
+<span id="cb22-7"><a href="#cb22-7"></a>  <span class="at">delta =</span> <span class="fl">0.01</span>,</span>
+<span id="cb22-8"><a href="#cb22-8"></a>  <span class="at">ctrl =</span> <span class="cn">NULL</span>,</span>
+<span id="cb22-9"><a href="#cb22-9"></a>  <span class="at">seed =</span> <span class="dv">625</span>,</span>
+<span id="cb22-10"><a href="#cb22-10"></a>  <span class="at">psi =</span> <span class="st">"bisquare"</span>,</span>
+<span id="cb22-11"><a href="#cb22-11"></a>  <span class="at">std_data =</span> <span class="cn">TRUE</span></span>
+<span id="cb22-12"><a href="#cb22-12"></a>)</span>
+<span id="cb22-13"><a href="#cb22-13"></a></span>
+<span id="cb22-14"><a href="#cb22-14"></a><span class="fu">saveRDS</span>(fit_4, <span class="at">file =</span> <span class="fu">file.path</span>(models_dir, <span class="fu">glue</span>(<span class="st">"{type}_fit_4.rds"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="fit-model-5-parental-partner-synergy-composite-h5-rq4" class="level3 page-columns page-full" data-number="6.6">
+<h3 data-number="6.6" class="anchored" data-anchor-id="fit-model-5-parental-partner-synergy-composite-h5-rq4"><span class="header-section-number">6.6</span> Fit Model 5: Parental × Partner Synergy, Composite (H5, RQ4)</h3>
+<div class="cell column-page-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1"></a>fit_5 <span class="ot">&lt;-</span> <span class="fu">robust_analysis</span>(</span>
+<span id="cb23-2"><a href="#cb23-2"></a>  <span class="at">data =</span> <span class="fu">get</span>(<span class="fu">glue</span>(<span class="st">"{type}_data"</span>)),</span>
+<span id="cb23-3"><a href="#cb23-3"></a>  <span class="at">form =</span> model_5,</span>
+<span id="cb23-4"><a href="#cb23-4"></a>  <span class="at">n_boots =</span> n_bootstraps,</span>
+<span id="cb23-5"><a href="#cb23-5"></a>  <span class="at">pct =</span> <span class="fl">0.95</span>,</span>
+<span id="cb23-6"><a href="#cb23-6"></a>  <span class="at">alpha =</span> <span class="fl">0.05</span>,</span>
+<span id="cb23-7"><a href="#cb23-7"></a>  <span class="at">delta =</span> <span class="fl">0.01</span>,</span>
+<span id="cb23-8"><a href="#cb23-8"></a>  <span class="at">ctrl =</span> <span class="cn">NULL</span>,</span>
+<span id="cb23-9"><a href="#cb23-9"></a>  <span class="at">seed =</span> <span class="dv">625</span>,</span>
+<span id="cb23-10"><a href="#cb23-10"></a>  <span class="at">psi =</span> <span class="st">"bisquare"</span>,</span>
+<span id="cb23-11"><a href="#cb23-11"></a>  <span class="at">std_data =</span> <span class="cn">TRUE</span></span>
+<span id="cb23-12"><a href="#cb23-12"></a>)</span>
+<span id="cb23-13"><a href="#cb23-13"></a></span>
+<span id="cb23-14"><a href="#cb23-14"></a><span class="fu">saveRDS</span>(fit_5, <span class="at">file =</span> <span class="fu">file.path</span>(models_dir, <span class="fu">glue</span>(<span class="st">"{type}_fit_5.rds"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="fit-model-6-gender-moderated-synergy-composite-h6-rq4" class="level3 page-columns page-full" data-number="6.7">
+<h3 data-number="6.7" class="anchored" data-anchor-id="fit-model-6-gender-moderated-synergy-composite-h6-rq4"><span class="header-section-number">6.7</span> Fit Model 6: Gender-Moderated Synergy, Composite (H6, RQ4)</h3>
+<div class="cell column-page-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1"></a>fit_6 <span class="ot">&lt;-</span> <span class="fu">robust_analysis</span>(</span>
+<span id="cb24-2"><a href="#cb24-2"></a>  <span class="at">data =</span> <span class="fu">get</span>(<span class="fu">glue</span>(<span class="st">"{type}_data"</span>)),</span>
+<span id="cb24-3"><a href="#cb24-3"></a>  <span class="at">form =</span> model_6,</span>
+<span id="cb24-4"><a href="#cb24-4"></a>  <span class="at">n_boots =</span> n_bootstraps,</span>
+<span id="cb24-5"><a href="#cb24-5"></a>  <span class="at">pct =</span> <span class="fl">0.95</span>,</span>
+<span id="cb24-6"><a href="#cb24-6"></a>  <span class="at">alpha =</span> <span class="fl">0.05</span>,</span>
+<span id="cb24-7"><a href="#cb24-7"></a>  <span class="at">delta =</span> <span class="fl">0.01</span>,</span>
+<span id="cb24-8"><a href="#cb24-8"></a>  <span class="at">ctrl =</span> <span class="cn">NULL</span>,</span>
+<span id="cb24-9"><a href="#cb24-9"></a>  <span class="at">seed =</span> <span class="dv">625</span>,</span>
+<span id="cb24-10"><a href="#cb24-10"></a>  <span class="at">psi =</span> <span class="st">"bisquare"</span>,</span>
+<span id="cb24-11"><a href="#cb24-11"></a>  <span class="at">std_data =</span> <span class="cn">TRUE</span></span>
+<span id="cb24-12"><a href="#cb24-12"></a>)</span>
+<span id="cb24-13"><a href="#cb24-13"></a></span>
+<span id="cb24-14"><a href="#cb24-14"></a><span class="fu">saveRDS</span>(fit_6, <span class="at">file =</span> <span class="fu">file.path</span>(models_dir, <span class="fu">glue</span>(<span class="st">"{type}_fit_6.rds"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="fit-model-7-motherfather-ses-main-effects-disaggregated-h1-rq1" class="level3 page-columns page-full" data-number="6.8">
+<h3 data-number="6.8" class="anchored" data-anchor-id="fit-model-7-motherfather-ses-main-effects-disaggregated-h1-rq1"><span class="header-section-number">6.8</span> Fit Model 7: Mother/Father SES Main Effects, Disaggregated (H1, RQ1)</h3>
+<div class="cell column-page-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1"></a>fit_7 <span class="ot">&lt;-</span> <span class="fu">robust_analysis</span>(</span>
+<span id="cb25-2"><a href="#cb25-2"></a>  <span class="at">data =</span> <span class="fu">get</span>(<span class="fu">glue</span>(<span class="st">"{type}_data"</span>)),</span>
+<span id="cb25-3"><a href="#cb25-3"></a>  <span class="at">form =</span> model_7,</span>
+<span id="cb25-4"><a href="#cb25-4"></a>  <span class="at">n_boots =</span> n_bootstraps,</span>
+<span id="cb25-5"><a href="#cb25-5"></a>  <span class="at">pct =</span> <span class="fl">0.95</span>,</span>
+<span id="cb25-6"><a href="#cb25-6"></a>  <span class="at">alpha =</span> <span class="fl">0.05</span>,</span>
+<span id="cb25-7"><a href="#cb25-7"></a>  <span class="at">delta =</span> <span class="fl">0.01</span>,</span>
+<span id="cb25-8"><a href="#cb25-8"></a>  <span class="at">ctrl =</span> <span class="cn">NULL</span>,</span>
+<span id="cb25-9"><a href="#cb25-9"></a>  <span class="at">seed =</span> <span class="dv">625</span>,</span>
+<span id="cb25-10"><a href="#cb25-10"></a>  <span class="at">psi =</span> <span class="st">"bisquare"</span>,</span>
+<span id="cb25-11"><a href="#cb25-11"></a>  <span class="at">std_data =</span> <span class="cn">TRUE</span></span>
+<span id="cb25-12"><a href="#cb25-12"></a>)</span>
+<span id="cb25-13"><a href="#cb25-13"></a></span>
+<span id="cb25-14"><a href="#cb25-14"></a><span class="fu">saveRDS</span>(fit_7, <span class="at">file =</span> <span class="fu">file.path</span>(models_dir, <span class="fu">glue</span>(<span class="st">"{type}_fit_7.rds"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="fit-model-8-partner-ses-main-effects-disaggregated-h2-rq2" class="level3 page-columns page-full" data-number="6.9">
+<h3 data-number="6.9" class="anchored" data-anchor-id="fit-model-8-partner-ses-main-effects-disaggregated-h2-rq2"><span class="header-section-number">6.9</span> Fit Model 8: Partner SES Main Effects, Disaggregated (H2, RQ2)</h3>
+<div class="cell column-page-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1"></a>fit_8 <span class="ot">&lt;-</span> <span class="fu">robust_analysis</span>(</span>
+<span id="cb26-2"><a href="#cb26-2"></a>  <span class="at">data =</span> <span class="fu">get</span>(<span class="fu">glue</span>(<span class="st">"{type}_data"</span>)),</span>
+<span id="cb26-3"><a href="#cb26-3"></a>  <span class="at">form =</span> model_8,</span>
+<span id="cb26-4"><a href="#cb26-4"></a>  <span class="at">n_boots =</span> n_bootstraps,</span>
+<span id="cb26-5"><a href="#cb26-5"></a>  <span class="at">pct =</span> <span class="fl">0.95</span>,</span>
+<span id="cb26-6"><a href="#cb26-6"></a>  <span class="at">alpha =</span> <span class="fl">0.05</span>,</span>
+<span id="cb26-7"><a href="#cb26-7"></a>  <span class="at">delta =</span> <span class="fl">0.01</span>,</span>
+<span id="cb26-8"><a href="#cb26-8"></a>  <span class="at">ctrl =</span> <span class="cn">NULL</span>,</span>
+<span id="cb26-9"><a href="#cb26-9"></a>  <span class="at">seed =</span> <span class="dv">625</span>,</span>
+<span id="cb26-10"><a href="#cb26-10"></a>  <span class="at">psi =</span> <span class="st">"bisquare"</span>,</span>
+<span id="cb26-11"><a href="#cb26-11"></a>  <span class="at">std_data =</span> <span class="cn">TRUE</span></span>
+<span id="cb26-12"><a href="#cb26-12"></a>)</span>
+<span id="cb26-13"><a href="#cb26-13"></a></span>
+<span id="cb26-14"><a href="#cb26-14"></a><span class="fu">saveRDS</span>(fit_8, <span class="at">file =</span> <span class="fu">file.path</span>(models_dir, <span class="fu">glue</span>(<span class="st">"{type}_fit_8.rds"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="fit-model-9-gender-motherfatherpartner-ses-disaggregated-h3-h4-rq3" class="level3 page-columns page-full" data-number="6.10">
+<h3 data-number="6.10" class="anchored" data-anchor-id="fit-model-9-gender-motherfatherpartner-ses-disaggregated-h3-h4-rq3"><span class="header-section-number">6.10</span> Fit Model 9: Gender × Mother/Father/Partner SES, Disaggregated (H3, H4, RQ3)</h3>
+<div class="cell column-page-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1"></a>fit_9 <span class="ot">&lt;-</span> <span class="fu">robust_analysis</span>(</span>
+<span id="cb27-2"><a href="#cb27-2"></a>  <span class="at">data =</span> <span class="fu">get</span>(<span class="fu">glue</span>(<span class="st">"{type}_data"</span>)),</span>
+<span id="cb27-3"><a href="#cb27-3"></a>  <span class="at">form =</span> model_9,</span>
+<span id="cb27-4"><a href="#cb27-4"></a>  <span class="at">n_boots =</span> n_bootstraps,</span>
+<span id="cb27-5"><a href="#cb27-5"></a>  <span class="at">pct =</span> <span class="fl">0.95</span>,</span>
+<span id="cb27-6"><a href="#cb27-6"></a>  <span class="at">alpha =</span> <span class="fl">0.05</span>,</span>
+<span id="cb27-7"><a href="#cb27-7"></a>  <span class="at">delta =</span> <span class="fl">0.01</span>,</span>
+<span id="cb27-8"><a href="#cb27-8"></a>  <span class="at">ctrl =</span> <span class="cn">NULL</span>,</span>
+<span id="cb27-9"><a href="#cb27-9"></a>  <span class="at">seed =</span> <span class="dv">625</span>,</span>
+<span id="cb27-10"><a href="#cb27-10"></a>  <span class="at">psi =</span> <span class="st">"bisquare"</span>,</span>
+<span id="cb27-11"><a href="#cb27-11"></a>  <span class="at">std_data =</span> <span class="cn">TRUE</span></span>
+<span id="cb27-12"><a href="#cb27-12"></a>)</span>
+<span id="cb27-13"><a href="#cb27-13"></a></span>
+<span id="cb27-14"><a href="#cb27-14"></a><span class="fu">saveRDS</span>(fit_9, <span class="at">file =</span> <span class="fu">file.path</span>(models_dir, <span class="fu">glue</span>(<span class="st">"{type}_fit_9.rds"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="fit-model-10-parent-partner-synergy-disaggregated-h5-rq4" class="level3 page-columns page-full" data-number="6.11">
+<h3 data-number="6.11" class="anchored" data-anchor-id="fit-model-10-parent-partner-synergy-disaggregated-h5-rq4"><span class="header-section-number">6.11</span> Fit Model 10: Parent × Partner Synergy, Disaggregated (H5, RQ4)</h3>
+<div class="cell column-page-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1"></a>fit_10 <span class="ot">&lt;-</span> <span class="fu">robust_analysis</span>(</span>
+<span id="cb28-2"><a href="#cb28-2"></a>  <span class="at">data =</span> <span class="fu">get</span>(<span class="fu">glue</span>(<span class="st">"{type}_data"</span>)),</span>
+<span id="cb28-3"><a href="#cb28-3"></a>  <span class="at">form =</span> model_10,</span>
+<span id="cb28-4"><a href="#cb28-4"></a>  <span class="at">n_boots =</span> n_bootstraps,</span>
+<span id="cb28-5"><a href="#cb28-5"></a>  <span class="at">pct =</span> <span class="fl">0.95</span>,</span>
+<span id="cb28-6"><a href="#cb28-6"></a>  <span class="at">alpha =</span> <span class="fl">0.05</span>,</span>
+<span id="cb28-7"><a href="#cb28-7"></a>  <span class="at">delta =</span> <span class="fl">0.01</span>,</span>
+<span id="cb28-8"><a href="#cb28-8"></a>  <span class="at">ctrl =</span> <span class="cn">NULL</span>,</span>
+<span id="cb28-9"><a href="#cb28-9"></a>  <span class="at">seed =</span> <span class="dv">625</span>,</span>
+<span id="cb28-10"><a href="#cb28-10"></a>  <span class="at">psi =</span> <span class="st">"bisquare"</span>,</span>
+<span id="cb28-11"><a href="#cb28-11"></a>  <span class="at">std_data =</span> <span class="cn">TRUE</span></span>
+<span id="cb28-12"><a href="#cb28-12"></a>)</span>
+<span id="cb28-13"><a href="#cb28-13"></a></span>
+<span id="cb28-14"><a href="#cb28-14"></a><span class="fu">saveRDS</span>(fit_10, <span class="at">file =</span> <span class="fu">file.path</span>(models_dir, <span class="fu">glue</span>(<span class="st">"{type}_fit_10.rds"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="fit-model-11-gender-parent-specific-synergy-disaggregated-h6-rq4" class="level3 page-columns page-full" data-number="6.12">
+<h3 data-number="6.12" class="anchored" data-anchor-id="fit-model-11-gender-parent-specific-synergy-disaggregated-h6-rq4"><span class="header-section-number">6.12</span> Fit Model 11: Gender × Parent-Specific Synergy, Disaggregated (H6, RQ4)</h3>
+<div class="cell column-page-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb29"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1"></a>fit_11 <span class="ot">&lt;-</span> <span class="fu">robust_analysis</span>(</span>
+<span id="cb29-2"><a href="#cb29-2"></a>  <span class="at">data =</span> <span class="fu">get</span>(<span class="fu">glue</span>(<span class="st">"{type}_data"</span>)),</span>
+<span id="cb29-3"><a href="#cb29-3"></a>  <span class="at">form =</span> model_11,</span>
+<span id="cb29-4"><a href="#cb29-4"></a>  <span class="at">n_boots =</span> n_bootstraps,</span>
+<span id="cb29-5"><a href="#cb29-5"></a>  <span class="at">pct =</span> <span class="fl">0.95</span>,</span>
+<span id="cb29-6"><a href="#cb29-6"></a>  <span class="at">alpha =</span> <span class="fl">0.05</span>,</span>
+<span id="cb29-7"><a href="#cb29-7"></a>  <span class="at">delta =</span> <span class="fl">0.01</span>,</span>
+<span id="cb29-8"><a href="#cb29-8"></a>  <span class="at">ctrl =</span> <span class="cn">NULL</span>,</span>
+<span id="cb29-9"><a href="#cb29-9"></a>  <span class="at">seed =</span> <span class="dv">625</span>,</span>
+<span id="cb29-10"><a href="#cb29-10"></a>  <span class="at">psi =</span> <span class="st">"bisquare"</span>,</span>
+<span id="cb29-11"><a href="#cb29-11"></a>  <span class="at">std_data =</span> <span class="cn">TRUE</span></span>
+<span id="cb29-12"><a href="#cb29-12"></a>)</span>
+<span id="cb29-13"><a href="#cb29-13"></a></span>
+<span id="cb29-14"><a href="#cb29-14"></a><span class="fu">saveRDS</span>(fit_11, <span class="at">file =</span> <span class="fu">file.path</span>(models_dir, <span class="fu">glue</span>(<span class="st">"{type}_fit_11.rds"</span>)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+</section>
+<section id="save-all-model-fits" class="level2 page-columns page-full" data-number="7">
+<h2 data-number="7" class="anchored" data-anchor-id="save-all-model-fits"><span class="header-section-number">7</span> Save All Model Fits</h2>
+<div class="cell column-body-outset-right">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb30"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1"></a><span class="co"># rebuild and persist the consolidated list only when (re)fitting</span></span>
+<span id="cb30-2"><a href="#cb30-2"></a><span class="cf">if</span> (refit_models) {</span>
+<span id="cb30-3"><a href="#cb30-3"></a>  all_fits <span class="ot">&lt;-</span> <span class="fu">named_list</span>(</span>
+<span id="cb30-4"><a href="#cb30-4"></a>    fit_0, fit_1, fit_2, fit_3, fit_4, fit_5, fit_6,</span>
+<span id="cb30-5"><a href="#cb30-5"></a>    fit_7, fit_8, fit_9, fit_10, fit_11</span>
+<span id="cb30-6"><a href="#cb30-6"></a>  )</span>
+<span id="cb30-7"><a href="#cb30-7"></a></span>
+<span id="cb30-8"><a href="#cb30-8"></a>  <span class="fu">saveRDS</span>(all_fits, consolidated_path)</span>
+<span id="cb30-9"><a href="#cb30-9"></a>} <span class="cf">else</span> {</span>
+<span id="cb30-10"><a href="#cb30-10"></a>  <span class="fu">message</span>(<span class="st">"cached fits found; skipping model fitting (set recompute_heavy &lt;- TRUE to refit)"</span>)</span>
+<span id="cb30-11"><a href="#cb30-11"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div style="margin-block-end: 2rem;">
+
+</div>
+</section>
+<section id="output" class="level2" data-number="8">
+<h2 data-number="8" class="anchored" data-anchor-id="output"><span class="header-section-number">8</span> Output</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 44%">
+<col style="width: 55%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>File</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>assets/models/models.rds</code></td>
+<td>Formula specifications for Models 0–11</td>
+</tr>
+<tr class="even">
+<td><code>assets/data/saved/unadjusted_data.rds</code></td>
+<td>Preprocessed analysis dataset for the unadjusted fits</td>
+</tr>
+<tr class="odd">
+<td><code>assets/models/unadjusted_fit_{0..11}.rds</code></td>
+<td>One MM-estimation fit object per model specification</td>
+</tr>
+<tr class="even">
+<td><code>assets/models/unadjusted_fits.rds</code></td>
+<td>Consolidated named list of all 12 fitted models</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Next:</strong> <a href="../../../analysis/models/assumptions/index.html">Step 8 (Influence Diagnostics)</a></p>
+
+
+
+</section>
+
+<a onclick="window.scrollTo(0, 0); return false;" role="button" id="quarto-back-to-top"><i class="bi bi-arrow-up"></i> Back to top</a><div id="quarto-appendix" class="default"><section class="quarto-appendix-contents" role="doc-bibliography" id="quarto-bibliography"><h2 class="anchored quarto-appendix-heading">References</h2><div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-looman2017dutch" class="csl-entry" role="listitem">
+Looman, Marja, Edith J. M. Feskens, Monique de Rijk, et al. 2017. <span>“Development and Evaluation of the Dutch Healthy Diet Index 2015.”</span> <em>Public Health Nutrition</em> 20 (13): 2289–99. <a href="https://doi.org/10.1017/S136898001700091X">https://doi.org/10.1017/S136898001700091X</a>.
+</div>
+</div></section></div></main> <!-- /main -->
+<script>
+  function updateFooter(tfoot) {
+    const td = tfoot.querySelector("td");
+    if (td) {
+      tfoot.innerHTML = `<td colspan="100%" style="text-align: left;">${td.innerHTML}</td>`;
+    }
+    tfoot.style.fontSize = "0.9em";
+  }
+
+  function setClassToString() {
+    document.querySelectorAll(".sc.slash").forEach((element) => {
+      element.classList.replace("sc", "st");
+    });
+
+    // fix escaped quotes and special characters inside strings
+    // these are marked as 'sc' by pandoc but should be styled as strings
+    document.querySelectorAll("code.sourceCode .sc").forEach((element) => {
+      const text = element.textContent;
+      // check if this is an escape sequence that should be part of a string
+      if (
+        text === '\\"' ||
+        text === "\\'" ||
+        text === "\\\\" ||
+        (text.startsWith("\\") &&
+          element.previousElementSibling?.classList.contains("st"))
+      ) {
+        element.classList.add("st");
+        element.classList.remove("sc");
+      }
+      // also check if surrounded by string elements
+      const prev = element.previousElementSibling;
+      const next = element.nextElementSibling;
+      if (
+        (prev?.classList.contains("st") || next?.classList.contains("st")) &&
+        text.startsWith("\\")
+      ) {
+        element.classList.add("st");
+        element.classList.remove("sc");
+      }
+    });
+  }
+
+  function wrapOperatorsInSpans() {
+    function isInsideStringOrComment(node) {
+      let parent = node.parentElement;
+      while (parent && parent.tagName !== "CODE") {
+        if (
+          parent.classList.contains("st") ||
+          parent.classList.contains("co")
+        ) {
+          return true;
+        }
+        parent = parent.parentElement;
+      }
+      return false;
+    }
+
+    function processTextNode(textNode) {
+      if (isInsideStringOrComment(textNode)) {
+        return;
+      }
+
+      const text = textNode.textContent;
+      if (!text.includes("=") && !text.includes("&")) {
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      let lastIndex = 0;
+
+      // match: && first, then standalone & (not part of &&), then standalone =
+      const regex = /(&&)|(&(?!&))|((?<![=!<>:])=(?!=))/g;
+      let match;
+
+      while ((match = regex.exec(text)) !== null) {
+        if (lastIndex < match.index) {
+          fragment.appendChild(
+            document.createTextNode(text.slice(lastIndex, match.index)),
+          );
+        }
+        const span = document.createElement("span");
+        if (match[1]) {
+          span.className = "logicaland";
+        } else if (match[2]) {
+          span.className = "ampersand";
+        } else {
+          span.className = "equals";
+        }
+        span.textContent = match[0];
+        fragment.appendChild(span);
+        lastIndex = match.index + match[0].length;
+      }
+
+      if (lastIndex > 0) {
+        if (lastIndex < text.length) {
+          fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+        }
+        textNode.parentNode.replaceChild(fragment, textNode);
+      }
+    }
+
+    document.querySelectorAll("code.sourceCode.r").forEach((code) => {
+      const walker = document.createTreeWalker(
+        code,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false,
+      );
+
+      const textNodes = [];
+      while (walker.nextNode()) {
+        textNodes.push(walker.currentNode);
+      }
+
+      textNodes.forEach(processTextNode);
+    });
+  }
+
+  function hideCodeBlocksStartingWith(searchText) {
+    if (!searchText || typeof searchText !== "string") {
+      console.error("Invalid searchText: must be a non-empty string.");
+      return;
+    }
+
+    const codeBlocks = document.querySelectorAll("code");
+    codeBlocks.forEach((codeBlock) => {
+      if (codeBlock.textContent.trim().startsWith(searchText)) {
+        codeBlock.style.display = "none";
+      }
+    });
+  }
+
+  function injectFigcaptionStyleInline() {
+    const figcaptions = document.querySelectorAll("figcaption");
+    figcaptions.forEach((element) => {
+      element.style.fontSize = "1.0em";
+      element.style.fontStyle = "italic";
+      element.style.textAlign = "center";
+    });
+  }
+
+  function openLinksInNewTab() {
+    document.querySelectorAll("a[href]").forEach((link) => {
+      const href = link.getAttribute("href");
+      // keep in-page anchors (toc, footnotes, citations, code-line
+      // numbers), script links, and bootstrap toggles in the same tab
+      if (
+        href.startsWith("#") ||
+        href.startsWith("javascript:") ||
+        link.hasAttribute("data-bs-toggle")
+      ) {
+        return;
+      }
+      link.setAttribute("target", "_blank");
+      link.setAttribute("rel", "noopener noreferrer");
+    });
+  }
+
+  function adjustLastCells() {
+    const panels = document.querySelectorAll("[class*=quarto-layout-panel]");
+    panels.forEach((panel) => {
+      const lastCell = [...panel.querySelectorAll(".quarto-layout-cell")].pop();
+      if (lastCell) {
+        const figcaption = document.createElement("figcaption");
+        figcaption.innerHTML = lastCell.innerHTML;
+        figcaption.style.fontSize = "1.0em";
+        figcaption.style.fontStyle = "italic";
+        figcaption.style.textAlign = "center";
+        lastCell.innerHTML = "";
+        lastCell.appendChild(figcaption);
+      }
+    });
+  }
+
+  function setHeaderNumbering() {
+    // pages define window.config inline; guard so its absence
+    // cannot throw and abort the remaining initialization
+    if (window.config?.offset === undefined) {
+      return;
+    }
+
+    // fix main content headers - exclude toc-title
+    document
+      .querySelectorAll("h1, h2, h3, h4, h5, h6")
+      .forEach((headerElement) => {
+        // skip the TOC title
+        if (headerElement.id === "toc-title") {
+          return;
+        }
+
+        let sectionNumber = headerElement.getAttribute("data-number");
+
+        if (!sectionNumber) {
+          let autoNumber =
+            Array.from(headerElement.parentNode.children)
+              .filter((el) => el.tagName.match(/^H[1-6]$/))
+              .indexOf(headerElement) + 1;
+
+          sectionNumber = autoNumber.toString();
+          headerElement.setAttribute("data-number", sectionNumber);
+        }
+
+        let sectionSpan = headerElement.querySelector(".header-section-number");
+        if (!sectionSpan) {
+          sectionSpan = document.createElement("span");
+          sectionSpan.classList.add("header-section-number");
+          headerElement.prepend(sectionSpan);
+        }
+
+        const level = parseInt(headerElement.tagName.substring(1));
+        const baseParts = sectionNumber
+          .split(".")
+          .slice(0, level === 1 ? 0 : level - 1)
+          .join(".");
+
+        sectionSpan.innerHTML =
+          level === 1
+            ? `${window.config.offset}.&nbsp;`
+            : `${window.config.offset}.${baseParts}`;
+      });
+
+    // fix sidebar TOC entries - prepend offset, don't replace
+    document.querySelectorAll("#TOC .header-section-number").forEach((span) => {
+      const original = span.textContent.trim();
+      if (!original) return;
+
+      span.textContent = `${window.config.offset}.${original}`;
+    });
+  }
+
+  function applyHeaderTheme() {
+    // paper-like masthead: white ground, single hairline rule, ink-on-paper
+    // text, quiet hover underlines; overrides bootstrap's navbar variables
+    if (document.getElementById("header-theme-style")) return;
+
+    // dark-stroke toggler icon (the markup may carry data-bs-theme="dark",
+    // which would otherwise draw white lines on the white header)
+    const togglerIcon =
+      `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' ` +
+      `viewBox='0 0 30 30'%3e%3cpath stroke='rgba%280, 0, 0, 0.6%29' ` +
+      `stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' ` +
+      `d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e")`;
+
+    const style = document.createElement("style");
+    style.id = "header-theme-style";
+    style.textContent = `
+      #quarto-header {
+        box-shadow: none !important;
+      }
+      #quarto-header .navbar {
+        --bs-navbar-color: rgba(0, 0, 0, .62);
+        --bs-navbar-hover-color: rgba(0, 0, 0, .95);
+        --bs-navbar-active-color: rgba(0, 0, 0, .95);
+        --bs-navbar-disabled-color: rgba(0, 0, 0, .3);
+        --bs-navbar-brand-color: rgba(0, 0, 0, .85);
+        --bs-navbar-brand-hover-color: rgba(0, 0, 0, .95);
+        --bs-navbar-toggler-border-color: transparent;
+        --bs-navbar-toggler-icon-bg: ${togglerIcon};
+        background: #fff;
+        border-bottom: 1px solid rgba(0, 0, 0, .12);
+        box-shadow: none;
+        padding-block: .45rem;
+      }
+
+      /* brand as a small-caps masthead title */
+      #quarto-header .navbar-brand {
+        font-size: 1.05rem;
+        font-variant: small-caps;
+        letter-spacing: .04em;
+        text-decoration: none;
+      }
+
+      /* menu links: even rhythm, slight tracking, no boxes */
+      #quarto-header .navbar-nav .nav-link {
+        font-size: .95rem;
+        letter-spacing: .01em;
+        padding-block: .3rem;
+      }
+      #quarto-header .navbar-nav .nav-link:hover,
+      #quarto-header .navbar-nav .nav-link:focus-visible {
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: .4em;
+        text-decoration-color: rgba(0, 0, 0, .35);
+      }
+
+      /* numbering prefixes recede behind the labels */
+      #quarto-header .nav-number {
+        color: rgba(0, 0, 0, .45);
+        font-variant-numeric: oldstyle-nums;
+      }
+
+      /* smaller, fainter dropdown caret */
+      #quarto-header .navbar .dropdown-toggle::after {
+        border-top-width: .26em;
+        border-right-width: .26em;
+        border-left-width: .26em;
+        vertical-align: .14em;
+        margin-left: .32em;
+        opacity: .5;
+      }
+
+      /* dropdowns: flat white panels with a hairline edge */
+      #quarto-header .navbar .dropdown-menu {
+        --bs-dropdown-bg: #fff;
+        --bs-dropdown-color: rgba(0, 0, 0, .7);
+        --bs-dropdown-link-color: rgba(0, 0, 0, .7);
+        --bs-dropdown-link-hover-color: rgba(0, 0, 0, .95);
+        --bs-dropdown-link-hover-bg: rgba(0, 0, 0, .04);
+        --bs-dropdown-link-active-color: rgba(0, 0, 0, .95);
+        --bs-dropdown-link-active-bg: rgba(0, 0, 0, .06);
+        --bs-dropdown-border-color: rgba(0, 0, 0, .12);
+        --bs-dropdown-border-radius: 0;
+        background: #fff;
+        border: 1px solid rgba(0, 0, 0, .12);
+        border-radius: 0;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, .06);
+        padding-block: .35rem;
+        font-size: .95rem;
+        min-width: 15rem;
+      }
+      #quarto-header .navbar .dropdown-item {
+        padding: .4rem 1.1rem;
+      }
+
+      /* secondary (breadcrumb) bar follows the same idiom */
+      #quarto-header .quarto-secondary-nav {
+        background: #fff;
+        border-bottom: 1px solid rgba(0, 0, 0, .08);
+      }
+      #quarto-header .quarto-secondary-nav .quarto-btn-toggle {
+        color: rgba(0, 0, 0, .6);
+      }
+      #quarto-header .quarto-page-breadcrumbs .breadcrumb {
+        --bs-breadcrumb-divider-color: rgba(0, 0, 0, .45);
+        margin-bottom: 0;
+      }
+      #quarto-header .quarto-page-breadcrumbs .breadcrumb-item {
+        font-size: .9rem;
+        font-style: italic;
+        color: rgba(0, 0, 0, .55);
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function numberNavbarItems() {
+    // pass 1: leaf links (top-level direct links + dropdown entries).
+    // document order == navbar order == _quarto.yml order.
+    const leaves = document.querySelectorAll(
+      "#quarto-header .navbar a.nav-link:not(.dropdown-toggle), " +
+        "#quarto-header .navbar a.dropdown-item",
+    );
+    leaves.forEach((link, i) => {
+      let tag = link.querySelector(".nav-number");
+      if (!tag) {
+        tag = document.createElement("span");
+        tag.className = "nav-number";
+        link.prepend(tag);
+      }
+      tag.textContent = `${i + 1}. `;
+    });
+
+    // pass 2: parents report the range of their children's numbers.
+    document
+      .querySelectorAll("#quarto-header .navbar a.dropdown-toggle")
+      .forEach((toggle) => {
+        const item = toggle.closest(".nav-item");
+        const nums = [...item.querySelectorAll(".dropdown-menu .nav-number")]
+          .map((n) => parseInt(n.textContent, 10))
+          .filter((n) => !isNaN(n));
+        if (nums.length === 0) return;
+
+        const lo = Math.min(...nums);
+        const hi = Math.max(...nums);
+
+        let tag = toggle.querySelector(".nav-number");
+        if (!tag) {
+          tag = document.createElement("span");
+          tag.className = "nav-number nav-number-group";
+          toggle.prepend(tag);
+        }
+        tag.textContent = lo === hi ? `${lo}. ` : `${lo}–${hi}. `;
+      });
+  }
+
+  function setStepIndicator() {
+    // navbar is pinned (_quarto.yml: navbar.pinned), so the current step
+    // sits on the left, beside the brand; menu items move to the right
+    const slot = document.querySelector(".quarto-navbar-tools");
+    const step = document.querySelector("h1.title")?.textContent.trim();
+    if (!slot || !step) return;
+
+    // scoped styles, injected once
+    if (!document.getElementById("step-indicator-style")) {
+      const style = document.createElement("style");
+      style.id = "step-indicator-style";
+      style.textContent = `
+        /* desktop: brand + step on the left, menu on the right */
+        @media (min-width: 992px) {
+          #quarto-header .navbar-brand-container { order: 0; margin: 0 !important; }
+          #quarto-header .quarto-navbar-tools {
+            order: 1;
+            display: flex;
+            align-items: center;
+          }
+          #quarto-header #navbarCollapse { order: 2; }
+          #quarto-header #navbarCollapse .navbar-nav {
+            margin-left: auto !important;
+            margin-right: 0 !important;
+          }
+        }
+        /* running-head style: italic, muted, set off by a middot */
+        .quarto-navbar-tools .step-name {
+          display: inline-block;
+          min-width: 0;
+          max-width: min(52ch, 38vw);
+          margin-inline-start: .65rem;
+          font-family: inherit;
+          font-size: .95rem;
+          font-style: italic;
+          font-weight: 400;
+          line-height: 1.25;
+          color: rgba(0, 0, 0, .55);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          vertical-align: middle;
+          user-select: none;
+        }
+        .quarto-navbar-tools .step-name::before {
+          content: "\\00B7";
+          margin-inline-end: .65rem;
+          font-style: normal;
+          color: rgba(0, 0, 0, .35);
+        }
+        @media (max-width: 991.98px) {
+          .quarto-navbar-tools .step-name { display: none; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    slot.innerHTML = `<span class="step-name"></span>`;
+    slot.querySelector(".step-name").textContent = step;
+  }
+
+  function fixAllPanelsCellFlexBasis() {
+    const panels = document.querySelectorAll(".quarto-layout-panel");
+    panels.forEach((panel) => {
+      const cells = panel.querySelectorAll(".quarto-layout-cell");
+      if (cells.length > 0) {
+        const referenceCell = cells[0];
+        const referenceFlexBasis =
+          window.getComputedStyle(referenceCell).flexBasis;
+        const lastCell = cells[cells.length - 1];
+        lastCell.style.flexBasis = referenceFlexBasis;
+      }
+    });
+  }
+
+  function moveLastFigCaption() {
+    const panels = document.querySelectorAll(".quarto-layout-panel");
+    panels.forEach((panel) => {
+      const rows = panel.querySelectorAll(".quarto-layout-row");
+      if (rows.length === 0) {
+        return;
+      }
+      const lastRow = rows[rows.length - 1];
+      const figCaptions = panel.querySelectorAll("figcaption");
+      if (figCaptions.length === 0) {
+        return;
+      }
+      const lastFigCaption = figCaptions[figCaptions.length - 1];
+      lastRow.insertAdjacentElement("afterend", lastFigCaption);
+    });
+  }
+
+  function styleAllCaptions() {
+    const captions = document.querySelectorAll("caption");
+    captions.forEach((caption) => {
+      caption.style.fontSize = "1.1em";
+      caption.style.fontStyle = "italic";
+    });
+  }
+
+  function adjustFooter() {
+    document.querySelectorAll("tfoot").forEach(updateFooter);
+  }
+
+  function styleTables(selector, maxWidth) {
+    document.querySelectorAll(selector).forEach((element) => {
+      element.style.maxWidth = maxWidth;
+      element.style.margin = "0 auto";
+    });
+  }
+
+  function replaceNAWithEmDash() {
+    document.querySelectorAll("td").forEach((td) => {
+      if (td.textContent.trim() === "NA") {
+        td.textContent = "—";
+      }
+    });
+  }
+
+  function formatAllCodeBlocks() {
+    const keywords = [
+      { text: "{", newClass: "curlybracket" },
+      { text: "}", newClass: "curlybracket" },
+      { text: "[[", newClass: "squarebracket" },
+      { text: "[", newClass: "squarebracket" },
+      { text: "]", newClass: "squarebracket" },
+      { text: "%>%", newClass: "pipe" },
+      { text: "%<>%", newClass: "pipe" },
+      { text: "%$%", newClass: "pipe" },
+      { text: "%T>%", newClass: "pipe" },
+      { text: "%s+%", newClass: "pipe" },
+      { text: "%||%", newClass: "pipe" },
+      { text: "%in%", newClass: "pipe" },
+      { text: "%dopar%", newClass: "pipe" },
+      { text: "`%>%`", newClass: "tickmark" },
+      { text: "`%<>%`", newClass: "tickmark" },
+      { text: "`%$%`", newClass: "tickmark" },
+      { text: "`%T>%`", newClass: "tickmark" },
+      { text: "`%s+%`", newClass: "tickmark" },
+      { text: "`%||%`", newClass: "tickmark" },
+      { text: "`%dopar%`", newClass: "tickmark" },
+      { text: "$", newClass: "dollarsign" },
+      { text: "function", newClass: "function" },
+      { text: "source", newClass: "source" },
+      { text: ",", newClass: "comma" },
+      { text: "::", newClass: "doublecolon" },
+      { text: "else", newClass: "else" },
+      { text: "if", newClass: "if" },
+      { text: "~", newClass: "tilde" },
+      { text: "=", newClass: "equals" },
+      { text: ":=", newClass: "equals" },
+      { text: "==", newClass: "equals" },
+      { text: "&&", newClass: "logicaland" },
+      { text: "&", newClass: "ampersand" },
+      { text: "-", newClass: "minus" },
+      { text: "+", newClass: "plus" },
+      { text: "/", newClass: "slash" },
+      { text: "\\", newClass: "slash" },
+      { text: "\\\\", newClass: "slash" },
+      { text: "`", newClass: "tickmark" },
+      { text: "*", newClass: "asterisk" },
+    ];
+
+    document.querySelectorAll("pre").forEach((pre) => {
+      pre.style.setProperty("line-height", "normal", "important");
+      const codeElement = pre.querySelector("code");
+      if (codeElement) {
+        codeElement.querySelectorAll("span").forEach((line) => {
+          // skip comments and strings - preserve their original styling
+          if (line.classList.contains("co") || line.classList.contains("st")) {
+            return;
+          }
+          const trimmedText = line.textContent.trim();
+          const keyword = keywords.find(
+            (k) =>
+              k.text === trimmedText ||
+              (trimmedText.startsWith(k.text) && trimmedText.endsWith(k.text)),
+          );
+          if (keyword) {
+            line.classList.add(keyword.newClass);
+          }
+        });
+      }
+    });
+
+    document.querySelectorAll("pre > code").forEach((codeBlock) => {
+      const patterns = [
+        {
+          regex:
+            /([a-zA-Z0-9]+)(<span class="[sc ]{0,3}doublecolon">::<\/span>)/g,
+          replacement: '<span class="package">$1</span>$2',
+        },
+        {
+          regex: /(<\/span>)(\s?)(\[)(\s?)/g,
+          replacement: '$1<span class="squarebracket">$2$3</span>$4',
+        },
+        {
+          regex: /([a-z]+)(\s?)(\[)(\s?)/g,
+          replacement: '$1<span class="squarebracket">$2$3</span>$4',
+        },
+        {
+          regex: /(<\/span>)(\s?)(\])(\s?)/g,
+          replacement: '$1<span class="squarebracket">$2$3</span>$4',
+        },
+        // handle closing curly brackets after '>' (with optional whitespace)
+        {
+          regex: /(>)(\s*)(\})(\s*)/g,
+          replacement: '$1<span class="curlybracket">$2$3</span>$4',
+        },
+        // handle opening curly brackets after '</span>' (with optional whitespace)
+        {
+          regex: /(<\/span>)(\s*)(\{)(\s*)/g,
+          replacement: '$1<span class="curlybracket">$2$3</span>$4',
+        },
+        // general patterns for square brackets
+        {
+          regex: /\[/g,
+          replacement: '<span class="squarebracket">[</span>',
+        },
+        {
+          regex: /\]/g,
+          replacement: '<span class="squarebracket">]</span>',
+        },
+        // add general patterns for all remaining curly brackets
+        {
+          regex: /\{/g,
+          replacement: '<span class="curlybracket">{</span>',
+        },
+        {
+          regex: /\}/g,
+          replacement: '<span class="curlybracket">}</span>',
+        },
+      ];
+
+      patterns.forEach(({ regex, replacement }) => {
+        codeBlock.innerHTML = codeBlock.innerHTML.replace(regex, replacement);
+      });
+    });
+
+    document.querySelectorAll("code.sourceCode.r").forEach((code) => {
+      processCodeBlock(code);
+    });
+
+    function processCodeBlock(node) {
+      Array.from(node.childNodes).forEach((child) => {
+        if (child.nodeType === Node.TEXT_NODE) {
+          const wrappedNodes = wrapBracketsInSpans(child.textContent);
+          if (wrappedNodes.length) {
+            wrappedNodes.forEach((newNode) =>
+              node.insertBefore(newNode, child),
+            );
+            node.removeChild(child);
+          }
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+          // skip processing brackets inside comments or strings
+          if (
+            child.classList.contains("co") ||
+            child.classList.contains("st")
+          ) {
+            return;
+          }
+          processCodeBlock(child);
+        }
+      });
+    }
+
+    function wrapBracketsInSpans(text) {
+      const fragment = document.createDocumentFragment();
+      let lastIndex = 0;
+
+      text.replace(/([()])/g, (match, bracket, index) => {
+        if (lastIndex < index) {
+          fragment.appendChild(
+            document.createTextNode(text.slice(lastIndex, index)),
+          );
+        }
+        const span = document.createElement("span");
+        span.className = bracket === "(" ? "bracketopen" : "bracketclose";
+        span.textContent = bracket;
+        fragment.appendChild(span);
+        lastIndex = index + 1;
+      });
+
+      if (lastIndex < text.length) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+      }
+
+      return Array.from(fragment.childNodes);
+    }
+
+    document.querySelectorAll("pre code").forEach((codeBlock) => {
+      const fragment = document.createDocumentFragment();
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = codeBlock.innerHTML;
+
+      function processNode(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const newContent = document.createDocumentFragment();
+          node.textContent.split(",").forEach((part, index, array) => {
+            newContent.appendChild(document.createTextNode(part));
+            if (index < array.length - 1) {
+              const commaSpan = document.createElement("span");
+              commaSpan.textContent = ",";
+              commaSpan.className = "comma";
+              newContent.appendChild(commaSpan);
+            }
+          });
+          return newContent;
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          const clone = node.cloneNode(false);
+          // skip processing inside strings and comments
+          if (node.className.includes("st") || node.className.includes("co")) {
+            clone.textContent = node.textContent;
+          } else {
+            for (let child of node.childNodes) {
+              clone.appendChild(processNode(child));
+            }
+          }
+          return clone;
+        }
+        return node.cloneNode(true);
+      }
+
+      for (let child of tempDiv.childNodes) {
+        fragment.appendChild(processNode(child));
+      }
+      codeBlock.innerHTML = "";
+      codeBlock.appendChild(fragment);
+    });
+  }
+
+  function attachCodeToggleHandlers() {
+    const hideBtn = document.getElementById("quarto-hide-all-code");
+    const showBtn = document.getElementById("quarto-show-all-code");
+
+    function toggleAllCode(show) {
+      document
+        .querySelectorAll("details.code-fold")
+        .forEach((d) => (d.open = show));
+    }
+
+    if (hideBtn) hideBtn.addEventListener("click", () => toggleAllCode(false));
+    if (showBtn) showBtn.addEventListener("click", () => toggleAllCode(true));
+  }
+
+  function wrapCodeFoldInCell() {
+    // convert any cell with column-page-right to column-body-outset-right
+    // (only for cells that directly contain code, not table outputs)
+    document.querySelectorAll(".cell.column-page-right").forEach((cell) => {
+      // only convert if this cell contains code (details.code-fold or .code-copy-outer-scaffold)
+      if (
+        cell.querySelector(
+          ":scope > details.code-fold, :scope > .code-copy-outer-scaffold",
+        )
+      ) {
+        cell.classList.remove("column-page-right");
+        cell.classList.add("column-body-outset-right");
+      }
+    });
+
+    // find all details.code-fold that need wrapping
+    document.querySelectorAll("details.code-fold").forEach((details) => {
+      const parent = details.parentElement;
+
+      // skip if already properly wrapped
+      if (parent.classList.contains("column-body-outset-right")) {
+        return;
+      }
+
+      // wrap it
+      const wrapper = document.createElement("div");
+      wrapper.className = "cell column-body-outset-right";
+      details.parentNode.insertBefore(wrapper, details);
+      wrapper.appendChild(details);
+    });
+
+    // same for .code-copy-outer-scaffold without details wrapper
+    document
+      .querySelectorAll(".code-copy-outer-scaffold")
+      .forEach((scaffold) => {
+        // skip if inside details (already handled above)
+        if (scaffold.closest("details.code-fold")) return;
+
+        const parent = scaffold.parentElement;
+
+        // skip if already properly wrapped
+        if (parent.classList.contains("column-body-outset-right")) {
+          return;
+        }
+
+        // wrap it
+        const wrapper = document.createElement("div");
+        wrapper.className = "cell column-body-outset-right";
+        scaffold.parentNode.insertBefore(wrapper, scaffold);
+        wrapper.appendChild(scaffold);
+      });
+  }
+
+  function scrollActivityBackToTop(retriesLeft = 25) {
+    const btn =
+      document.getElementById("quarto-back-to-top") ||
+      document.querySelector(".back-to-top, [aria-label='Back to top']");
+    if (!btn) {
+      // element may not be injected yet; retry briefly, then give up
+      if (retriesLeft > 0) {
+        setTimeout(() => scrollActivityBackToTop(retriesLeft - 1), 200);
+      }
+      return;
+    }
+
+    // take visibility away from quarto's position-based display logic
+    const style = document.createElement("style");
+    style.textContent = `
+    #quarto-back-to-top {
+      display: block !important;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+      pointer-events: none;
+    }
+    #quarto-back-to-top.scroll-active {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+  `;
+    document.head.appendChild(style);
+
+    let hideTimer = null;
+    const hideDelay = 700; // ms of no scrolling before it fades out
+
+    window.addEventListener(
+      "scroll",
+      () => {
+        btn.classList.add("scroll-active");
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => {
+          btn.classList.remove("scroll-active");
+        }, hideDelay);
+      },
+      { passive: true },
+    );
+  }
+
+  function initializeFeatures() {
+    // run each step in isolation so a failure in one feature
+    // cannot abort the remaining initialization
+    const run = (label, fn) => {
+      try {
+        fn();
+      } catch (err) {
+        console.error(`utilities.html: ${label} failed`, err);
+      }
+    };
+
+    run("tableFooters", () => {
+      document.querySelectorAll("tfoot").forEach((tfoot) => {
+        updateFooter(tfoot);
+        new MutationObserver((mutations) => {
+          if (
+            mutations.some(
+              (m) => m.type === "attributes" && m.attributeName === "colspan",
+            )
+          ) {
+            updateFooter(tfoot);
+          }
+        }).observe(tfoot, {
+          attributes: true,
+          subtree: true,
+          attributeFilter: ["colspan"],
+        });
+      });
+
+      document.addEventListener("click", (event) => {
+        if (event.target.matches("[class*=paginate_button]")) {
+          adjustFooter();
+        }
+      });
+    });
+
+    run("styleTables", () => {
+      styleTables(".table-max-450 table", "450px");
+      styleTables(".table-max-550 table", "550px");
+    });
+    run("replaceNAWithEmDash", replaceNAWithEmDash);
+    run("injectFigcaptionStyleInline", injectFigcaptionStyleInline);
+    run("adjustLastCells", adjustLastCells);
+    run("styleAllCaptions", styleAllCaptions);
+    run("formatAllCodeBlocks", formatAllCodeBlocks);
+    run("fixAllPanelsCellFlexBasis", fixAllPanelsCellFlexBasis);
+    run("moveLastFigCaption", moveLastFigCaption);
+    run("setHeaderNumbering", setHeaderNumbering);
+    run("applyHeaderTheme", applyHeaderTheme);
+    run("numberNavbarItems", numberNavbarItems);
+    run("setStepIndicator", setStepIndicator);
+    run("openLinksInNewTab", openLinksInNewTab);
+    run("hideCodeBlocks", () => hideCodeBlocksStartingWith("Styling"));
+    run("setClassToString", setClassToString);
+    run("wrapOperatorsInSpans", wrapOperatorsInSpans);
+    run("attachCodeToggleHandlers", attachCodeToggleHandlers);
+    run("wrapCodeFoldInCell", wrapCodeFoldInCell);
+    run("scrollActivityBackToTop", scrollActivityBackToTop);
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    initializeFeatures();
+    document
+      .querySelectorAll('[href*="#cb"]')
+      .forEach((i) => (i.style.color = "#c5c8c6"));
+
+    // auto-toggle the first collapsible note callout once the tab has
+    // been visible for a second; skip entirely when none exists
+    const hasCollapsibleCallout = document.querySelector(
+      '[class*=callout-note] [data-bs-toggle="collapse"]',
+    );
+    if (!hasCollapsibleCallout) return;
+
+    let visibilityTimer = null;
+    let hasTriggered = false;
+
+    const triggerCollapse = () => {
+      if (hasTriggered) return;
+
+      const callout = document.querySelector("[class*=callout-note]");
+      const toggle = callout?.querySelector('[data-bs-toggle="collapse"]');
+
+      if (toggle) {
+        toggle.click();
+        hasTriggered = true;
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        visibilityTimer = setTimeout(triggerCollapse, 1000);
+      } else {
+        clearTimeout(visibilityTimer);
+      }
+    };
+
+    if (document.visibilityState === "visible") {
+      visibilityTimer = setTimeout(triggerCollapse, 1000);
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+  });
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+    const viewSource = window.document.getElementById('quarto-view-source') ||
+                       window.document.getElementById('quarto-code-tools-source');
+    if (viewSource) {
+      const sourceUrl = viewSource.getAttribute("data-quarto-source-url");
+      viewSource.addEventListener("click", function(e) {
+        if (sourceUrl) {
+          // rstudio viewer pane
+          if (/\bcapabilities=\b/.test(window.location)) {
+            window.open(sourceUrl);
+          } else {
+            window.location.href = sourceUrl;
+          }
+        } else {
+          const modal = new bootstrap.Modal(document.getElementById('quarto-embedded-source-code-modal'));
+          modal.show();
+        }
+        return false;
+      });
+    }
+    function toggleCodeHandler(show) {
+      return function(e) {
+        const detailsSrc = window.document.querySelectorAll(".cell > details > .sourceCode");
+        for (let i=0; i<detailsSrc.length; i++) {
+          const details = detailsSrc[i].parentElement;
+          if (show) {
+            details.open = true;
+          } else {
+            details.removeAttribute("open");
+          }
+        }
+        const cellCodeDivs = window.document.querySelectorAll(".cell > .sourceCode");
+        const fromCls = show ? "hidden" : "unhidden";
+        const toCls = show ? "unhidden" : "hidden";
+        for (let i=0; i<cellCodeDivs.length; i++) {
+          const codeDiv = cellCodeDivs[i];
+          if (codeDiv.classList.contains(fromCls)) {
+            codeDiv.classList.remove(fromCls);
+            codeDiv.classList.add(toCls);
+          } 
+        }
+        return false;
+      }
+    }
+    const hideAllCode = window.document.getElementById("quarto-hide-all-code");
+    if (hideAllCode) {
+      hideAllCode.addEventListener("click", toggleCodeHandler(false));
+    }
+    const showAllCode = window.document.getElementById("quarto-show-all-code");
+    if (showAllCode) {
+      showAllCode.addEventListener("click", toggleCodeHandler(true));
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>R version 4.6.0 (2026-04-24)<br> Platform: aarch64-apple-darwin23<br> Running under: macOS Tahoe 26.2<br> Quarto 1.9.38<br></p>
+<div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/siardv/lifecourse-sep-diet/blob/main/analysis/models/unadjusted/index.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/siardv/lifecourse-sep-diet/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+<script src="../../../site_libs/quarto-html/zenscroll-min.js"></script>
+</body></html>

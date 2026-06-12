@@ -1,0 +1,2420 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.38">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Siard van den Bosch">
+<meta name="dcterms.date" content="2025-02-18">
+
+<title>Adjusted Regression Models: Robust Estimates – Reproducible Diet &amp; Health Analysis Pipeline</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="../../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../../">
+<script src="../../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../../site_libs/quarto-html/quarto-syntax-highlighting-f540398f06f5761fd6ec65d376638bec.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../../site_libs/bootstrap/bootstrap-fe4dec1d006b0d9f8d6bd10fa228eddd.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<style>html{ scroll-behavior: smooth; }</style>
+
+
+<link rel="stylesheet" href="../../../assets/style/custom.css">
+</head>
+
+<body class="floating nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../../../index.html">
+    <span class="navbar-title">SES &amp; Diet Quality</span>
+    </a>
+  </div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../../analysis/setup/index.html"> 
+<span class="menu-text">Setup</span></a>
+  </li>  
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-data-processing" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Data Processing</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-data-processing">    
+        <li>
+    <a class="dropdown-item" href="../../../analysis/data/preparation/index.html">
+ <span class="dropdown-text">ISCO-08 Standardization</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/data/cleaning/index.html">
+ <span class="dropdown-text">Data Cleaning</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/data/outliers/index.html">
+ <span class="dropdown-text">Outliers Detection</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/data/imputation/index.html">
+ <span class="dropdown-text">Missing Data Imputation</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/data/post-imputation/index.html">
+ <span class="dropdown-text">Post-Imputation Finalization</span></a>
+  </li>  
+    </ul>
+  </li>
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-modeling" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Modeling</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-modeling">    
+        <li>
+    <a class="dropdown-item" href="../../../analysis/models/unadjusted/index.html">
+ <span class="dropdown-text">Unadjusted Models</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/models/assumptions/index.html">
+ <span class="dropdown-text">Influence Diagnostics</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/models/adjusted/index.html">
+ <span class="dropdown-text">Adjusted Models</span></a>
+  </li>  
+    </ul>
+  </li>
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-model-evaluation" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Model Evaluation</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-model-evaluation">    
+        <li>
+    <a class="dropdown-item" href="../../../analysis/models/goodness-of-fit/model-fit/index.html">
+ <span class="dropdown-text">Initial Model Evaluation</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/models/goodness-of-fit/interaction-effects/index.html">
+ <span class="dropdown-text">Interaction Effects</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../../../analysis/models/goodness-of-fit/performance-metrics/index.html">
+ <span class="dropdown-text">Bootstrapped Validation</span></a>
+  </li>  
+    </ul>
+  </li>
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Contents</h2>
+   
+  <ul>
+  <li><a href="#analysis-parameters" id="toc-analysis-parameters" class="nav-link active" data-scroll-target="#analysis-parameters"><span class="header-section-number">1</span> Analysis Parameters</a></li>
+  <li><a href="#bootstrap-functions" id="toc-bootstrap-functions" class="nav-link" data-scroll-target="#bootstrap-functions"><span class="header-section-number">2</span> Bootstrap Functions</a></li>
+  <li><a href="#load-data-and-model-specifications" id="toc-load-data-and-model-specifications" class="nav-link" data-scroll-target="#load-data-and-model-specifications"><span class="header-section-number">3</span> Load Data and Model Specifications</a></li>
+  <li><a href="#model-hypothesis-mapping" id="toc-model-hypothesis-mapping" class="nav-link" data-scroll-target="#model-hypothesis-mapping"><span class="header-section-number">4</span> Model-Hypothesis Mapping</a></li>
+  <li><a href="#fit-all-models" id="toc-fit-all-models" class="nav-link" data-scroll-target="#fit-all-models"><span class="header-section-number">5</span> Fit All Models</a></li>
+  <li><a href="#save-consolidated-model-fits" id="toc-save-consolidated-model-fits" class="nav-link" data-scroll-target="#save-consolidated-model-fits"><span class="header-section-number">6</span> Save Consolidated Model Fits</a></li>
+  <li><a href="#output" id="toc-output" class="nav-link" data-scroll-target="#output"><span class="header-section-number">7</span> Output</a></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/siardv/lifecourse-sep-diet/blob/main/analysis/models/adjusted/index.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/siardv/lifecourse-sep-diet/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></nav>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
+    </div>
+<!-- main -->
+<main class="content page-columns page-full" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<div class="quarto-title-block"><div><h1 class="title">Adjusted Regression Models: Robust Estimates</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Toggle Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li></ul></div></div>
+<p class="subtitle lead">Modeling After Removing Influential Observations</p>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Siard van den Bosch </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">February 18, 2025</p>
+    </div>
+  </div>
+  
+    <div>
+    <div class="quarto-title-meta-heading">Modified</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date-modified">June 12, 2026</p>
+    </div>
+  </div>
+    
+  </div>
+  
+
+
+</header>
+
+
+<script>
+  window.config = {offset: 9};
+</script>
+<div style="margin-block-end: 2rem;">
+
+</div>
+<table class="caption-top table">
+<tbody>
+<tr class="odd">
+<td><strong>Purpose</strong></td>
+<td>Refit the Step 7 nested model set on the outlier-trimmed sensitivity dataset</td>
+</tr>
+<tr class="even">
+<td><strong>Inputs</strong></td>
+<td><code>adjusted_data.rds</code>, <code>models.rds</code></td>
+</tr>
+<tr class="odd">
+<td><strong>Outputs</strong></td>
+<td><code>adjusted_fit_{0..11}.rds</code>, <code>adjusted_fits.rds</code></td>
+</tr>
+<tr class="even">
+<td><strong>Method</strong></td>
+<td>MM-estimation; gender-stratified parallel bootstrap</td>
+</tr>
+<tr class="odd">
+<td><strong>Requires</strong></td>
+<td><a href="../../../analysis/models/unadjusted/index.html">Step 7 (Unadjusted Models)</a>, <a href="../../../analysis/models/assumptions/index.html">Step 8 (Influence Diagnostics)</a></td>
+</tr>
+</tbody>
+</table>
+<div style="margin-block-end: 1rem;">
+
+</div>
+<div class="cell column-body">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a><span class="co"># clear global environment, garbage collect, and detach packages</span></span>
+<span id="cb1-2"><a href="#cb1-2"></a><span class="fu">rm</span>(<span class="at">list =</span> <span class="fu">ls</span>(<span class="at">envir =</span> .GlobalEnv), <span class="at">envir =</span> .GlobalEnv)</span>
+<span id="cb1-3"><a href="#cb1-3"></a><span class="fu">invisible</span>(<span class="fu">gc</span>(<span class="at">full =</span> <span class="cn">TRUE</span>))</span>
+<span id="cb1-4"><a href="#cb1-4"></a><span class="fu">invisible</span>(<span class="fu">lapply</span>(<span class="fu">grep</span>(<span class="st">":|autoloads|globalenv"</span>, <span class="fu">search</span>(),</span>
+<span id="cb1-5"><a href="#cb1-5"></a>  <span class="at">invert =</span> <span class="cn">TRUE</span>, <span class="at">value =</span> <span class="cn">TRUE</span>, <span class="at">ignore.case =</span> <span class="cn">TRUE</span></span>
+<span id="cb1-6"><a href="#cb1-6"></a>), detach, <span class="at">character.only =</span> <span class="cn">TRUE</span>, <span class="at">unload =</span> <span class="cn">TRUE</span>, <span class="at">force =</span> <span class="cn">TRUE</span>))</span>
+<span id="cb1-7"><a href="#cb1-7"></a></span>
+<span id="cb1-8"><a href="#cb1-8"></a><span class="co"># source custom functions (consistent with steps 7-8)</span></span>
+<span id="cb1-9"><a href="#cb1-9"></a>purrr<span class="sc">::</span><span class="fu">walk</span>(<span class="fu">file.path</span>(here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"assets"</span>, <span class="st">"functions"</span>), <span class="fu">paste0</span>(<span class="fu">c</span>(</span>
+<span id="cb1-10"><a href="#cb1-10"></a>  <span class="st">"numeric_df"</span>, <span class="st">"fit_robust_model"</span>, <span class="st">"standardize"</span>, <span class="st">"named_list"</span>,</span>
+<span id="cb1-11"><a href="#cb1-11"></a>  <span class="st">"set_globals"</span>, <span class="st">"import_pipes"</span>, <span class="st">"fit_models"</span>, <span class="st">"prepare_model_matrices"</span>,</span>
+<span id="cb1-12"><a href="#cb1-12"></a>  <span class="st">"sci_to_tex"</span>, <span class="st">"create_lmrob_control"</span>, <span class="st">"process_model"</span>, <span class="st">"save_function"</span></span>
+<span id="cb1-13"><a href="#cb1-13"></a>), <span class="st">".R"</span>)), source)</span>
+<span id="cb1-14"><a href="#cb1-14"></a></span>
+<span id="cb1-15"><a href="#cb1-15"></a><span class="co"># set global options and import pipe operators</span></span>
+<span id="cb1-16"><a href="#cb1-16"></a><span class="fu">set_globals</span>()</span>
+<span id="cb1-17"><a href="#cb1-17"></a><span class="fu">import_pipes</span>()</span>
+<span id="cb1-18"><a href="#cb1-18"></a></span>
+<span id="cb1-19"><a href="#cb1-19"></a><span class="co"># global recompute switch</span></span>
+<span id="cb1-20"><a href="#cb1-20"></a><span class="co"># TRUE re-runs the heavy steps; FALSE loads cached assets when they exist</span></span>
+<span id="cb1-21"><a href="#cb1-21"></a>recompute_heavy <span class="ot">&lt;-</span> <span class="cn">FALSE</span></span>
+<span id="cb1-22"><a href="#cb1-22"></a></span>
+<span id="cb1-23"><a href="#cb1-23"></a><span class="co"># define analysis type</span></span>
+<span id="cb1-24"><a href="#cb1-24"></a>type <span class="ot">&lt;-</span> <span class="st">"adjusted"</span></span>
+<span id="cb1-25"><a href="#cb1-25"></a><span class="fu">options</span>(<span class="at">width =</span> <span class="dv">250</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div class="cell column-body">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a><span class="fu">library</span>(compiler)</span>
+<span id="cb2-2"><a href="#cb2-2"></a><span class="fu">library</span>(parallel)</span>
+<span id="cb2-3"><a href="#cb2-3"></a><span class="fu">library</span>(robustbase)</span>
+<span id="cb2-4"><a href="#cb2-4"></a><span class="fu">library</span>(glue)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<section id="analysis-parameters" class="level2 page-columns page-full" data-number="1">
+<h2 data-number="1" class="anchored" data-anchor-id="analysis-parameters"><span class="header-section-number">1</span> Analysis Parameters</h2>
+<div class="cell column-body">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a><span class="co"># bootstrap configuration</span></span>
+<span id="cb3-2"><a href="#cb3-2"></a>bootstrap_params <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb3-3"><a href="#cb3-3"></a>  <span class="at">n_boots   =</span> <span class="dv">5000</span>L,</span>
+<span id="cb3-4"><a href="#cb3-4"></a>  <span class="at">pct       =</span> <span class="fl">0.95</span>,</span>
+<span id="cb3-5"><a href="#cb3-5"></a>  <span class="at">alpha     =</span> <span class="fl">0.05</span>,</span>
+<span id="cb3-6"><a href="#cb3-6"></a>  <span class="at">delta     =</span> <span class="fl">0.01</span>,</span>
+<span id="cb3-7"><a href="#cb3-7"></a>  <span class="at">seed      =</span> <span class="dv">625</span>L,</span>
+<span id="cb3-8"><a href="#cb3-8"></a>  <span class="at">max_cores =</span> <span class="dv">8</span>L</span>
+<span id="cb3-9"><a href="#cb3-9"></a>)</span>
+<span id="cb3-10"><a href="#cb3-10"></a></span>
+<span id="cb3-11"><a href="#cb3-11"></a><span class="co"># robust regression configuration</span></span>
+<span id="cb3-12"><a href="#cb3-12"></a>robust_params <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb3-13"><a href="#cb3-13"></a>  <span class="at">psi            =</span> <span class="st">"bisquare"</span>,</span>
+<span id="cb3-14"><a href="#cb3-14"></a>  <span class="at">std_data       =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb3-15"><a href="#cb3-15"></a>  <span class="at">coef_threshold =</span> <span class="fl">1e4</span></span>
+<span id="cb3-16"><a href="#cb3-16"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="bootstrap-functions" class="level2 page-columns page-full" data-number="2">
+<h2 data-number="2" class="anchored" data-anchor-id="bootstrap-functions"><span class="header-section-number">2</span> Bootstrap Functions</h2>
+<div class="cell column-body">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a>min_bootstrap_iterations <span class="ot">&lt;-</span> <span class="cf">function</span>(data, <span class="at">statistic =</span> mean, <span class="at">alpha =</span> <span class="fl">0.05</span>, <span class="at">delta =</span> <span class="fl">0.01</span>) {</span>
+<span id="cb4-2"><a href="#cb4-2"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">inherits</span>(data, <span class="fu">c</span>(<span class="st">"data.frame"</span>, <span class="st">"matrix"</span>, <span class="st">"numeric"</span>, <span class="st">"integer"</span>))) {</span>
+<span id="cb4-3"><a href="#cb4-3"></a>    <span class="fu">stop</span>(<span class="st">"'data' must be data.frame, matrix, or numeric vector."</span>)</span>
+<span id="cb4-4"><a href="#cb4-4"></a>  }</span>
+<span id="cb4-5"><a href="#cb4-5"></a>  statistic <span class="ot">&lt;-</span> <span class="fu">match.fun</span>(statistic)</span>
+<span id="cb4-6"><a href="#cb4-6"></a>  bootstrap_data <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">inherits</span>(data, <span class="fu">c</span>(<span class="st">"data.frame"</span>, <span class="st">"matrix"</span>))) data[, <span class="dv">1</span>] <span class="cf">else</span> data</span>
+<span id="cb4-7"><a href="#cb4-7"></a></span>
+<span id="cb4-8"><a href="#cb4-8"></a>  n <span class="ot">&lt;-</span> <span class="fu">length</span>(bootstrap_data)</span>
+<span id="cb4-9"><a href="#cb4-9"></a>  prelim_boots <span class="ot">&lt;-</span> <span class="dv">100</span>L</span>
+<span id="cb4-10"><a href="#cb4-10"></a>  prelim_stats <span class="ot">&lt;-</span> <span class="fu">replicate</span>(</span>
+<span id="cb4-11"><a href="#cb4-11"></a>    prelim_boots,</span>
+<span id="cb4-12"><a href="#cb4-12"></a>    <span class="fu">statistic</span>(<span class="fu">sample</span>(bootstrap_data, n, <span class="at">replace =</span> <span class="cn">TRUE</span>))</span>
+<span id="cb4-13"><a href="#cb4-13"></a>  )</span>
+<span id="cb4-14"><a href="#cb4-14"></a></span>
+<span id="cb4-15"><a href="#cb4-15"></a>  var_boot <span class="ot">&lt;-</span> stats<span class="sc">::</span><span class="fu">var</span>(prelim_stats)</span>
+<span id="cb4-16"><a href="#cb4-16"></a>  za2 <span class="ot">&lt;-</span> stats<span class="sc">::</span><span class="fu">qnorm</span>(<span class="dv">1</span> <span class="sc">-</span> alpha <span class="sc">/</span> <span class="dv">2</span>)<span class="sc">^</span><span class="dv">2</span></span>
+<span id="cb4-17"><a href="#cb4-17"></a>  n_boot <span class="ot">&lt;-</span> <span class="fu">ceiling</span>(za2 <span class="sc">*</span> var_boot <span class="sc">/</span> (delta<span class="sc">^</span><span class="dv">2</span>))</span>
+<span id="cb4-18"><a href="#cb4-18"></a></span>
+<span id="cb4-19"><a href="#cb4-19"></a>  <span class="fu">max</span>(n_boot, <span class="dv">100</span>L)</span>
+<span id="cb4-20"><a href="#cb4-20"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div class="cell column-body">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a>bootstrap_pvalues <span class="ot">&lt;-</span> <span class="cf">function</span>(bootstrap_estimates, observed_coef) {</span>
+<span id="cb5-2"><a href="#cb5-2"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(bootstrap_estimates) <span class="sc">||</span> <span class="fu">ncol</span>(bootstrap_estimates) <span class="sc">==</span> <span class="dv">0</span>) {</span>
+<span id="cb5-3"><a href="#cb5-3"></a>    <span class="fu">return</span>(<span class="fu">rep</span>(<span class="cn">NA_real_</span>, <span class="fu">length</span>(observed_coef)))</span>
+<span id="cb5-4"><a href="#cb5-4"></a>  }</span>
+<span id="cb5-5"><a href="#cb5-5"></a>  purrr<span class="sc">::</span><span class="fu">map_dbl</span>(<span class="fu">seq_along</span>(observed_coef), <span class="cf">function</span>(j) {</span>
+<span id="cb5-6"><a href="#cb5-6"></a>    valid <span class="ot">&lt;-</span> bootstrap_estimates[<span class="sc">!</span><span class="fu">is.na</span>(bootstrap_estimates[, j]), j]</span>
+<span id="cb5-7"><a href="#cb5-7"></a>    n_valid <span class="ot">&lt;-</span> <span class="fu">length</span>(valid)</span>
+<span id="cb5-8"><a href="#cb5-8"></a>    p_low <span class="ot">&lt;-</span> (<span class="fu">sum</span>(valid <span class="sc">&lt;=</span> <span class="dv">0</span>) <span class="sc">+</span> <span class="dv">1</span>) <span class="sc">/</span> (n_valid <span class="sc">+</span> <span class="dv">1</span>)</span>
+<span id="cb5-9"><a href="#cb5-9"></a>    p_high <span class="ot">&lt;-</span> (<span class="fu">sum</span>(valid <span class="sc">&gt;=</span> <span class="dv">0</span>) <span class="sc">+</span> <span class="dv">1</span>) <span class="sc">/</span> (n_valid <span class="sc">+</span> <span class="dv">1</span>)</span>
+<span id="cb5-10"><a href="#cb5-10"></a>    <span class="fu">min</span>(<span class="dv">1</span>, <span class="dv">2</span> <span class="sc">*</span> <span class="fu">min</span>(p_low, p_high))</span>
+<span id="cb5-11"><a href="#cb5-11"></a>  })</span>
+<span id="cb5-12"><a href="#cb5-12"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div class="cell column-body">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a>bootstrap_linear_model <span class="ot">&lt;-</span> <span class="cf">function</span>(indices, dm, resp, <span class="at">ctrl =</span> <span class="cn">NULL</span>, <span class="at">type =</span> <span class="st">"robust"</span>,</span>
+<span id="cb6-2"><a href="#cb6-2"></a>                                   <span class="at">coef_threshold =</span> <span class="fl">1e4</span>) {</span>
+<span id="cb6-3"><a href="#cb6-3"></a>  <span class="fu">tryCatch</span>(</span>
+<span id="cb6-4"><a href="#cb6-4"></a>    {</span>
+<span id="cb6-5"><a href="#cb6-5"></a>      <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"robust"</span>) {</span>
+<span id="cb6-6"><a href="#cb6-6"></a>        fit <span class="ot">&lt;-</span> robustbase<span class="sc">::</span><span class="fu">lmrob.fit</span>(</span>
+<span id="cb6-7"><a href="#cb6-7"></a>          <span class="at">x =</span> dm[indices, , <span class="at">drop =</span> <span class="cn">FALSE</span>],</span>
+<span id="cb6-8"><a href="#cb6-8"></a>          <span class="at">y =</span> resp[indices],</span>
+<span id="cb6-9"><a href="#cb6-9"></a>          <span class="at">control =</span> ctrl</span>
+<span id="cb6-10"><a href="#cb6-10"></a>        )</span>
+<span id="cb6-11"><a href="#cb6-11"></a>        <span class="cf">if</span> (<span class="fu">is.null</span>(fit<span class="sc">$</span>coefficients) <span class="sc">||</span> <span class="fu">any</span>(<span class="fu">abs</span>(fit<span class="sc">$</span>coefficients) <span class="sc">&gt;</span> coef_threshold)) {</span>
+<span id="cb6-12"><a href="#cb6-12"></a>          alt_ctrl <span class="ot">&lt;-</span> robustbase<span class="sc">::</span><span class="fu">lmrob.control</span>(<span class="at">method =</span> <span class="st">"S"</span>, <span class="at">efficiency =</span> <span class="fl">0.85</span>, <span class="at">max.it =</span> <span class="dv">100</span>)</span>
+<span id="cb6-13"><a href="#cb6-13"></a>          fit <span class="ot">&lt;-</span> robustbase<span class="sc">::</span><span class="fu">lmrob.fit</span>(dm[indices, , <span class="at">drop =</span> <span class="cn">FALSE</span>], resp[indices], alt_ctrl)</span>
+<span id="cb6-14"><a href="#cb6-14"></a>        }</span>
+<span id="cb6-15"><a href="#cb6-15"></a>      } <span class="cf">else</span> {</span>
+<span id="cb6-16"><a href="#cb6-16"></a>        fit <span class="ot">&lt;-</span> stats<span class="sc">::</span><span class="fu">lm.fit</span>(dm[indices, , <span class="at">drop =</span> <span class="cn">FALSE</span>], resp[indices])</span>
+<span id="cb6-17"><a href="#cb6-17"></a>      }</span>
+<span id="cb6-18"><a href="#cb6-18"></a></span>
+<span id="cb6-19"><a href="#cb6-19"></a>      <span class="cf">if</span> (<span class="fu">is.null</span>(fit<span class="sc">$</span>coefficients)) {</span>
+<span id="cb6-20"><a href="#cb6-20"></a>        <span class="fu">return</span>(<span class="fu">rep</span>(<span class="cn">NA_real_</span>, <span class="fu">ncol</span>(dm)))</span>
+<span id="cb6-21"><a href="#cb6-21"></a>      }</span>
+<span id="cb6-22"><a href="#cb6-22"></a>      <span class="cf">if</span> (<span class="fu">any</span>(<span class="fu">abs</span>(fit<span class="sc">$</span>coefficients) <span class="sc">&gt;</span> coef_threshold)) {</span>
+<span id="cb6-23"><a href="#cb6-23"></a>        <span class="fu">return</span>(<span class="fu">rep</span>(<span class="cn">NA_real_</span>, <span class="fu">ncol</span>(dm)))</span>
+<span id="cb6-24"><a href="#cb6-24"></a>      }</span>
+<span id="cb6-25"><a href="#cb6-25"></a>      fit<span class="sc">$</span>coefficients</span>
+<span id="cb6-26"><a href="#cb6-26"></a>    },</span>
+<span id="cb6-27"><a href="#cb6-27"></a>    <span class="at">error =</span> <span class="cf">function</span>(e) <span class="fu">rep</span>(<span class="cn">NA_real_</span>, <span class="fu">ncol</span>(dm))</span>
+<span id="cb6-28"><a href="#cb6-28"></a>  )</span>
+<span id="cb6-29"><a href="#cb6-29"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div class="cell column-body">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1"></a>evaluate_boot_stats <span class="ot">&lt;-</span> <span class="cf">function</span>(boot_matrix, min_boots, <span class="at">pct =</span> <span class="fl">0.95</span>) {</span>
+<span id="cb7-2"><a href="#cb7-2"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.matrix</span>(boot_matrix)) <span class="fu">stop</span>(<span class="st">"boot_matrix must be a matrix"</span>)</span>
+<span id="cb7-3"><a href="#cb7-3"></a>  <span class="cf">if</span> (pct <span class="sc">&lt;=</span> <span class="dv">0</span> <span class="sc">||</span> pct <span class="sc">&gt;=</span> <span class="dv">1</span>) <span class="fu">stop</span>(<span class="st">"pct must be between 0 and 1"</span>)</span>
+<span id="cb7-4"><a href="#cb7-4"></a></span>
+<span id="cb7-5"><a href="#cb7-5"></a>  num_samples <span class="ot">&lt;-</span> <span class="fu">nrow</span>(boot_matrix)</span>
+<span id="cb7-6"><a href="#cb7-6"></a>  valid_samples <span class="ot">&lt;-</span> <span class="fu">sum</span>(stats<span class="sc">::</span><span class="fu">complete.cases</span>(boot_matrix))</span>
+<span id="cb7-7"><a href="#cb7-7"></a></span>
+<span id="cb7-8"><a href="#cb7-8"></a>  <span class="cf">if</span> (num_samples <span class="sc">&lt;</span> min_boots) {</span>
+<span id="cb7-9"><a href="#cb7-9"></a>    <span class="fu">warning</span>(glue<span class="sc">::</span><span class="fu">glue</span>(<span class="st">"Only {num_samples} bootstrap samples, below minimum required ({min_boots})."</span>))</span>
+<span id="cb7-10"><a href="#cb7-10"></a>  }</span>
+<span id="cb7-11"><a href="#cb7-11"></a>  <span class="cf">if</span> (valid_samples <span class="sc">&lt;</span> min_boots) {</span>
+<span id="cb7-12"><a href="#cb7-12"></a>    <span class="fu">warning</span>(glue<span class="sc">::</span><span class="fu">glue</span>(<span class="st">"Only {valid_samples} valid samples, below minimum required ({min_boots})."</span>))</span>
+<span id="cb7-13"><a href="#cb7-13"></a>  }</span>
+<span id="cb7-14"><a href="#cb7-14"></a></span>
+<span id="cb7-15"><a href="#cb7-15"></a>  probs <span class="ot">&lt;-</span> <span class="fu">c</span>((<span class="dv">1</span> <span class="sc">-</span> pct) <span class="sc">/</span> <span class="dv">2</span>, <span class="dv">1</span> <span class="sc">-</span> (<span class="dv">1</span> <span class="sc">-</span> pct) <span class="sc">/</span> <span class="dv">2</span>)</span>
+<span id="cb7-16"><a href="#cb7-16"></a>  conf_int <span class="ot">&lt;-</span> <span class="fu">t</span>(<span class="fu">apply</span>(boot_matrix, <span class="dv">2</span>, stats<span class="sc">::</span>quantile, <span class="at">probs =</span> probs, <span class="at">na.rm =</span> <span class="cn">TRUE</span>))</span>
+<span id="cb7-17"><a href="#cb7-17"></a></span>
+<span id="cb7-18"><a href="#cb7-18"></a>  <span class="fu">list</span>(</span>
+<span id="cb7-19"><a href="#cb7-19"></a>    <span class="at">conf_int =</span> conf_int,</span>
+<span id="cb7-20"><a href="#cb7-20"></a>    <span class="at">bootstrap_estimates =</span> boot_matrix,</span>
+<span id="cb7-21"><a href="#cb7-21"></a>    <span class="at">valid_samples =</span> valid_samples</span>
+<span id="cb7-22"><a href="#cb7-22"></a>  )</span>
+<span id="cb7-23"><a href="#cb7-23"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div class="cell column-body">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a>weighted_bootstrap <span class="ot">&lt;-</span> <span class="cf">function</span>(sample_size, response, strata,</span>
+<span id="cb8-2"><a href="#cb8-2"></a>                               <span class="at">outlier_percentile =</span> <span class="fl">0.9</span>, <span class="at">min_stratum_size =</span> <span class="dv">5</span>) {</span>
+<span id="cb8-3"><a href="#cb8-3"></a>  <span class="co"># plain stratified resampling: draw within strata proportional to stratum size</span></span>
+<span id="cb8-4"><a href="#cb8-4"></a>  <span class="co"># response, outlier_percentile, and min_stratum_size are retained for</span></span>
+<span id="cb8-5"><a href="#cb8-5"></a>  <span class="co"># signature compatibility and intentionally unused; conditioning the resample</span></span>
+<span id="cb8-6"><a href="#cb8-6"></a>  <span class="co"># on the response distribution understates bootstrap variability</span></span>
+<span id="cb8-7"><a href="#cb8-7"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.factor</span>(strata)) strata <span class="ot">&lt;-</span> <span class="fu">as.factor</span>(strata)</span>
+<span id="cb8-8"><a href="#cb8-8"></a></span>
+<span id="cb8-9"><a href="#cb8-9"></a>  strata_levels <span class="ot">&lt;-</span> <span class="fu">levels</span>(strata)</span>
+<span id="cb8-10"><a href="#cb8-10"></a>  strata_counts <span class="ot">&lt;-</span> <span class="fu">table</span>(strata)</span>
+<span id="cb8-11"><a href="#cb8-11"></a>  strata_prop <span class="ot">&lt;-</span> strata_counts <span class="sc">/</span> <span class="fu">length</span>(strata)</span>
+<span id="cb8-12"><a href="#cb8-12"></a></span>
+<span id="cb8-13"><a href="#cb8-13"></a>  strata_sizes <span class="ot">&lt;-</span> <span class="fu">floor</span>(strata_prop <span class="sc">*</span> sample_size)</span>
+<span id="cb8-14"><a href="#cb8-14"></a>  shortfall <span class="ot">&lt;-</span> sample_size <span class="sc">-</span> <span class="fu">sum</span>(strata_sizes)</span>
+<span id="cb8-15"><a href="#cb8-15"></a>  <span class="cf">if</span> (shortfall <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
+<span id="cb8-16"><a href="#cb8-16"></a>    additional <span class="ot">&lt;-</span> <span class="fu">sample</span>(strata_levels, shortfall, <span class="at">prob =</span> strata_prop)</span>
+<span id="cb8-17"><a href="#cb8-17"></a>    <span class="cf">for</span> (lev <span class="cf">in</span> additional) strata_sizes[lev] <span class="ot">&lt;-</span> strata_sizes[lev] <span class="sc">+</span> <span class="dv">1</span></span>
+<span id="cb8-18"><a href="#cb8-18"></a>  }</span>
+<span id="cb8-19"><a href="#cb8-19"></a></span>
+<span id="cb8-20"><a href="#cb8-20"></a>  samples <span class="ot">&lt;-</span> purrr<span class="sc">::</span><span class="fu">map</span>(strata_levels, <span class="cf">function</span>(level) {</span>
+<span id="cb8-21"><a href="#cb8-21"></a>    idx <span class="ot">&lt;-</span> <span class="fu">which</span>(strata <span class="sc">==</span> level)</span>
+<span id="cb8-22"><a href="#cb8-22"></a>    n_level <span class="ot">&lt;-</span> strata_sizes[level]</span>
+<span id="cb8-23"><a href="#cb8-23"></a>    <span class="cf">if</span> (n_level <span class="sc">==</span> <span class="dv">0</span> <span class="sc">||</span> <span class="fu">length</span>(idx) <span class="sc">==</span> <span class="dv">0</span>) {</span>
+<span id="cb8-24"><a href="#cb8-24"></a>      <span class="fu">return</span>(<span class="fu">integer</span>(<span class="dv">0</span>))</span>
+<span id="cb8-25"><a href="#cb8-25"></a>    }</span>
+<span id="cb8-26"><a href="#cb8-26"></a>    <span class="fu">sample</span>(idx, <span class="at">size =</span> n_level, <span class="at">replace =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb8-27"><a href="#cb8-27"></a>  })</span>
+<span id="cb8-28"><a href="#cb8-28"></a></span>
+<span id="cb8-29"><a href="#cb8-29"></a>  <span class="fu">do.call</span>(c, samples)</span>
+<span id="cb8-30"><a href="#cb8-30"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div class="cell column-body">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1"></a>parallel_bootstrap <span class="ot">&lt;-</span> <span class="cf">function</span>(data, n_boots, robust_fit, ols_fit, resp, dm, ctrl,</span>
+<span id="cb9-2"><a href="#cb9-2"></a>                               min_boots, <span class="at">pct =</span> <span class="fl">0.95</span>, <span class="at">max_cores =</span> <span class="dv">8</span>L, <span class="at">seed =</span> <span class="dv">625</span>L) {</span>
+<span id="cb9-3"><a href="#cb9-3"></a>  <span class="cf">if</span> (<span class="sc">!</span>(<span class="st">"woman"</span> <span class="sc">%in%</span> <span class="fu">names</span>(data))) <span class="fu">stop</span>(<span class="st">"Stratification variable 'woman' not found"</span>)</span>
+<span id="cb9-4"><a href="#cb9-4"></a>  <span class="fu">stopifnot</span>(<span class="fu">length</span>(resp) <span class="sc">==</span> <span class="fu">nrow</span>(data), <span class="fu">nrow</span>(dm) <span class="sc">==</span> <span class="fu">nrow</span>(data))</span>
+<span id="cb9-5"><a href="#cb9-5"></a></span>
+<span id="cb9-6"><a href="#cb9-6"></a>  strata <span class="ot">&lt;-</span> <span class="fu">as.factor</span>(data<span class="sc">$</span>woman)</span>
+<span id="cb9-7"><a href="#cb9-7"></a>  n_cores <span class="ot">&lt;-</span> <span class="fu">min</span>(parallel<span class="sc">::</span><span class="fu">detectCores</span>(), max_cores)</span>
+<span id="cb9-8"><a href="#cb9-8"></a>  cl <span class="ot">&lt;-</span> parallel<span class="sc">::</span><span class="fu">makeCluster</span>(n_cores)</span>
+<span id="cb9-9"><a href="#cb9-9"></a>  <span class="fu">on.exit</span>(parallel<span class="sc">::</span><span class="fu">stopCluster</span>(cl), <span class="at">add =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb9-10"><a href="#cb9-10"></a>  parallel<span class="sc">::</span><span class="fu">clusterSetRNGStream</span>(cl, <span class="at">iseed =</span> seed)</span>
+<span id="cb9-11"><a href="#cb9-11"></a></span>
+<span id="cb9-12"><a href="#cb9-12"></a>  parallel<span class="sc">::</span><span class="fu">clusterExport</span>(</span>
+<span id="cb9-13"><a href="#cb9-13"></a>    cl,</span>
+<span id="cb9-14"><a href="#cb9-14"></a>    <span class="at">varlist =</span> <span class="fu">c</span>(</span>
+<span id="cb9-15"><a href="#cb9-15"></a>      <span class="st">"data"</span>, <span class="st">"resp"</span>, <span class="st">"dm"</span>, <span class="st">"robust_fit"</span>, <span class="st">"ols_fit"</span>, <span class="st">"ctrl"</span>,</span>
+<span id="cb9-16"><a href="#cb9-16"></a>      <span class="st">"bootstrap_linear_model"</span>, <span class="st">"strata"</span>, <span class="st">"weighted_bootstrap"</span></span>
+<span id="cb9-17"><a href="#cb9-17"></a>    ),</span>
+<span id="cb9-18"><a href="#cb9-18"></a>    <span class="at">envir =</span> <span class="fu">environment</span>()</span>
+<span id="cb9-19"><a href="#cb9-19"></a>  )</span>
+<span id="cb9-20"><a href="#cb9-20"></a>  parallel<span class="sc">::</span><span class="fu">clusterEvalQ</span>(cl, <span class="fu">library</span>(robustbase))</span>
+<span id="cb9-21"><a href="#cb9-21"></a></span>
+<span id="cb9-22"><a href="#cb9-22"></a>  chunk_size <span class="ot">&lt;-</span> <span class="fu">min</span>(<span class="dv">500</span>L, n_boots)</span>
+<span id="cb9-23"><a href="#cb9-23"></a>  n_chunks <span class="ot">&lt;-</span> <span class="fu">ceiling</span>(n_boots <span class="sc">/</span> chunk_size)</span>
+<span id="cb9-24"><a href="#cb9-24"></a></span>
+<span id="cb9-25"><a href="#cb9-25"></a>  robust_results <span class="ot">&lt;-</span> <span class="fu">vector</span>(<span class="st">"list"</span>, n_boots)</span>
+<span id="cb9-26"><a href="#cb9-26"></a>  ols_results <span class="ot">&lt;-</span> <span class="fu">vector</span>(<span class="st">"list"</span>, n_boots)</span>
+<span id="cb9-27"><a href="#cb9-27"></a>  result_idx <span class="ot">&lt;-</span> <span class="dv">0</span>L</span>
+<span id="cb9-28"><a href="#cb9-28"></a></span>
+<span id="cb9-29"><a href="#cb9-29"></a>  <span class="cf">for</span> (chunk <span class="cf">in</span> <span class="fu">seq_len</span>(n_chunks)) {</span>
+<span id="cb9-30"><a href="#cb9-30"></a>    chunk_start <span class="ot">&lt;-</span> (chunk <span class="sc">-</span> <span class="dv">1</span>L) <span class="sc">*</span> chunk_size <span class="sc">+</span> <span class="dv">1</span>L</span>
+<span id="cb9-31"><a href="#cb9-31"></a>    chunk_end <span class="ot">&lt;-</span> <span class="fu">min</span>(chunk <span class="sc">*</span> chunk_size, n_boots)</span>
+<span id="cb9-32"><a href="#cb9-32"></a>    chunk_size_actual <span class="ot">&lt;-</span> chunk_end <span class="sc">-</span> chunk_start <span class="sc">+</span> <span class="dv">1</span>L</span>
+<span id="cb9-33"><a href="#cb9-33"></a></span>
+<span id="cb9-34"><a href="#cb9-34"></a>    <span class="fu">message</span>(glue<span class="sc">::</span><span class="fu">glue</span>(<span class="st">"Processing bootstrap chunk {chunk}/{n_chunks}..."</span>))</span>
+<span id="cb9-35"><a href="#cb9-35"></a></span>
+<span id="cb9-36"><a href="#cb9-36"></a>    boot_indices_chunk <span class="ot">&lt;-</span> parallel<span class="sc">::</span><span class="fu">parLapply</span>(</span>
+<span id="cb9-37"><a href="#cb9-37"></a>      cl, <span class="fu">seq_len</span>(chunk_size_actual),</span>
+<span id="cb9-38"><a href="#cb9-38"></a>      <span class="cf">function</span>(...) <span class="fu">weighted_bootstrap</span>(<span class="fu">nrow</span>(data), resp, strata)</span>
+<span id="cb9-39"><a href="#cb9-39"></a>    )</span>
+<span id="cb9-40"><a href="#cb9-40"></a></span>
+<span id="cb9-41"><a href="#cb9-41"></a>    <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(robust_fit)) {</span>
+<span id="cb9-42"><a href="#cb9-42"></a>      robust_chunk <span class="ot">&lt;-</span> parallel<span class="sc">::</span><span class="fu">parLapply</span>(cl, boot_indices_chunk, <span class="cf">function</span>(idxs) {</span>
+<span id="cb9-43"><a href="#cb9-43"></a>        <span class="fu">bootstrap_linear_model</span>(idxs, dm, resp, <span class="at">ctrl =</span> ctrl, <span class="at">type =</span> <span class="st">"robust"</span>)</span>
+<span id="cb9-44"><a href="#cb9-44"></a>      })</span>
+<span id="cb9-45"><a href="#cb9-45"></a>      <span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_along</span>(robust_chunk)) {</span>
+<span id="cb9-46"><a href="#cb9-46"></a>        robust_results[[result_idx <span class="sc">+</span> i]] <span class="ot">&lt;-</span> robust_chunk[[i]]</span>
+<span id="cb9-47"><a href="#cb9-47"></a>      }</span>
+<span id="cb9-48"><a href="#cb9-48"></a>    }</span>
+<span id="cb9-49"><a href="#cb9-49"></a></span>
+<span id="cb9-50"><a href="#cb9-50"></a>    ols_chunk <span class="ot">&lt;-</span> parallel<span class="sc">::</span><span class="fu">parLapply</span>(cl, boot_indices_chunk, <span class="cf">function</span>(idxs) {</span>
+<span id="cb9-51"><a href="#cb9-51"></a>      <span class="fu">bootstrap_linear_model</span>(idxs, dm, resp, <span class="at">ctrl =</span> <span class="cn">NULL</span>, <span class="at">type =</span> <span class="st">"ols"</span>)</span>
+<span id="cb9-52"><a href="#cb9-52"></a>    })</span>
+<span id="cb9-53"><a href="#cb9-53"></a>    <span class="cf">for</span> (i <span class="cf">in</span> <span class="fu">seq_along</span>(ols_chunk)) {</span>
+<span id="cb9-54"><a href="#cb9-54"></a>      ols_results[[result_idx <span class="sc">+</span> i]] <span class="ot">&lt;-</span> ols_chunk[[i]]</span>
+<span id="cb9-55"><a href="#cb9-55"></a>    }</span>
+<span id="cb9-56"><a href="#cb9-56"></a></span>
+<span id="cb9-57"><a href="#cb9-57"></a>    result_idx <span class="ot">&lt;-</span> result_idx <span class="sc">+</span> chunk_size_actual</span>
+<span id="cb9-58"><a href="#cb9-58"></a>  }</span>
+<span id="cb9-59"><a href="#cb9-59"></a></span>
+<span id="cb9-60"><a href="#cb9-60"></a>  robust_out <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(robust_fit)) {</span>
+<span id="cb9-61"><a href="#cb9-61"></a>    robust_matrix <span class="ot">&lt;-</span> <span class="fu">do.call</span>(rbind, robust_results[<span class="fu">seq_len</span>(n_boots)])</span>
+<span id="cb9-62"><a href="#cb9-62"></a>    <span class="fu">evaluate_boot_stats</span>(robust_matrix, min_boots, pct)</span>
+<span id="cb9-63"><a href="#cb9-63"></a>  } <span class="cf">else</span> {</span>
+<span id="cb9-64"><a href="#cb9-64"></a>    <span class="fu">list</span>(<span class="at">conf_int =</span> <span class="cn">NULL</span>, <span class="at">bootstrap_estimates =</span> <span class="cn">NULL</span>, <span class="at">valid_samples =</span> <span class="dv">0</span>L)</span>
+<span id="cb9-65"><a href="#cb9-65"></a>  }</span>
+<span id="cb9-66"><a href="#cb9-66"></a></span>
+<span id="cb9-67"><a href="#cb9-67"></a>  ols_matrix <span class="ot">&lt;-</span> <span class="fu">do.call</span>(rbind, ols_results[<span class="fu">seq_len</span>(n_boots)])</span>
+<span id="cb9-68"><a href="#cb9-68"></a>  ols_out <span class="ot">&lt;-</span> <span class="fu">evaluate_boot_stats</span>(ols_matrix, min_boots, pct)</span>
+<span id="cb9-69"><a href="#cb9-69"></a></span>
+<span id="cb9-70"><a href="#cb9-70"></a>  <span class="fu">list</span>(</span>
+<span id="cb9-71"><a href="#cb9-71"></a>    <span class="at">robust_out =</span> robust_out,</span>
+<span id="cb9-72"><a href="#cb9-72"></a>    <span class="at">ols_out =</span> ols_out,</span>
+<span id="cb9-73"><a href="#cb9-73"></a>    <span class="at">n_boots =</span> n_boots,</span>
+<span id="cb9-74"><a href="#cb9-74"></a>    <span class="at">completed_boots =</span> <span class="fu">list</span>(</span>
+<span id="cb9-75"><a href="#cb9-75"></a>      <span class="at">robust =</span> <span class="cf">if</span> (<span class="fu">is.null</span>(robust_fit)) <span class="dv">0</span>L <span class="cf">else</span> <span class="fu">nrow</span>(<span class="fu">do.call</span>(rbind, robust_results[<span class="fu">seq_len</span>(n_boots)])),</span>
+<span id="cb9-76"><a href="#cb9-76"></a>      <span class="at">ols =</span> <span class="fu">nrow</span>(ols_matrix)</span>
+<span id="cb9-77"><a href="#cb9-77"></a>    )</span>
+<span id="cb9-78"><a href="#cb9-78"></a>  )</span>
+<span id="cb9-79"><a href="#cb9-79"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div class="cell column-body">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1"></a><span class="co"># bootstrap-enabled process_model (overrides sourced version)</span></span>
+<span id="cb10-2"><a href="#cb10-2"></a>process_model_bootstrap <span class="ot">&lt;-</span> <span class="cf">function</span>(fit, type, n_boots, min_boots, data, resp, dm, ctrl, pct, <span class="at">seed =</span> <span class="dv">625</span>L) {</span>
+<span id="cb10-3"><a href="#cb10-3"></a>  <span class="cf">if</span> (<span class="fu">is.null</span>(fit)) {</span>
+<span id="cb10-4"><a href="#cb10-4"></a>    <span class="fu">return</span>(<span class="cn">NULL</span>)</span>
+<span id="cb10-5"><a href="#cb10-5"></a>  }</span>
+<span id="cb10-6"><a href="#cb10-6"></a></span>
+<span id="cb10-7"><a href="#cb10-7"></a>  model_output <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb10-8"><a href="#cb10-8"></a>    <span class="at">coefficients =</span> <span class="fu">coef</span>(fit),</span>
+<span id="cb10-9"><a href="#cb10-9"></a>    <span class="at">standard_errors =</span> <span class="fu">sqrt</span>(<span class="fu">diag</span>(stats<span class="sc">::</span><span class="fu">vcov</span>(fit))),</span>
+<span id="cb10-10"><a href="#cb10-10"></a>    <span class="at">confidence_intervals =</span> <span class="cn">NULL</span>,</span>
+<span id="cb10-11"><a href="#cb10-11"></a>    <span class="at">p_values =</span> <span class="cn">NULL</span>,</span>
+<span id="cb10-12"><a href="#cb10-12"></a>    <span class="at">bootstrap_estimates =</span> <span class="cn">NULL</span>,</span>
+<span id="cb10-13"><a href="#cb10-13"></a>    <span class="at">bootstrap_quality_score =</span> <span class="dv">0</span>,</span>
+<span id="cb10-14"><a href="#cb10-14"></a>    <span class="at">valid_bootstrap_count =</span> <span class="dv">0</span>L,</span>
+<span id="cb10-15"><a href="#cb10-15"></a>    <span class="at">bootstrap_convergence_rate =</span> <span class="dv">0</span>,</span>
+<span id="cb10-16"><a href="#cb10-16"></a>    <span class="at">diagnostics =</span> <span class="fu">list</span>()</span>
+<span id="cb10-17"><a href="#cb10-17"></a>  )</span>
+<span id="cb10-18"><a href="#cb10-18"></a></span>
+<span id="cb10-19"><a href="#cb10-19"></a>  <span class="cf">if</span> (n_boots <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
+<span id="cb10-20"><a href="#cb10-20"></a>    <span class="fu">message</span>(glue<span class="sc">::</span><span class="fu">glue</span>(<span class="st">"Running {n_boots} bootstrap iterations for {type} model..."</span>))</span>
+<span id="cb10-21"><a href="#cb10-21"></a></span>
+<span id="cb10-22"><a href="#cb10-22"></a>    robust_fit_for_boot <span class="ot">&lt;-</span> <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"robust"</span>) fit <span class="cf">else</span> <span class="cn">NULL</span></span>
+<span id="cb10-23"><a href="#cb10-23"></a>    ols_fit_for_boot <span class="ot">&lt;-</span> <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"ols"</span>) fit <span class="cf">else</span> <span class="cn">NULL</span></span>
+<span id="cb10-24"><a href="#cb10-24"></a></span>
+<span id="cb10-25"><a href="#cb10-25"></a>    boot_results <span class="ot">&lt;-</span> <span class="fu">tryCatch</span>(</span>
+<span id="cb10-26"><a href="#cb10-26"></a>      {</span>
+<span id="cb10-27"><a href="#cb10-27"></a>        <span class="fu">parallel_bootstrap</span>(</span>
+<span id="cb10-28"><a href="#cb10-28"></a>          <span class="at">data =</span> data, <span class="at">n_boots =</span> n_boots,</span>
+<span id="cb10-29"><a href="#cb10-29"></a>          <span class="at">robust_fit =</span> robust_fit_for_boot, <span class="at">ols_fit =</span> ols_fit_for_boot,</span>
+<span id="cb10-30"><a href="#cb10-30"></a>          <span class="at">resp =</span> resp, <span class="at">dm =</span> dm, <span class="at">ctrl =</span> ctrl, <span class="at">min_boots =</span> min_boots, <span class="at">pct =</span> pct, <span class="at">seed =</span> seed</span>
+<span id="cb10-31"><a href="#cb10-31"></a>        )</span>
+<span id="cb10-32"><a href="#cb10-32"></a>      },</span>
+<span id="cb10-33"><a href="#cb10-33"></a>      <span class="at">error =</span> <span class="cf">function</span>(e) {</span>
+<span id="cb10-34"><a href="#cb10-34"></a>        <span class="fu">warning</span>(glue<span class="sc">::</span><span class="fu">glue</span>(<span class="st">"Bootstrap failed: {e$message}"</span>))</span>
+<span id="cb10-35"><a href="#cb10-35"></a>        <span class="cn">NULL</span></span>
+<span id="cb10-36"><a href="#cb10-36"></a>      }</span>
+<span id="cb10-37"><a href="#cb10-37"></a>    )</span>
+<span id="cb10-38"><a href="#cb10-38"></a></span>
+<span id="cb10-39"><a href="#cb10-39"></a>    <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(boot_results)) {</span>
+<span id="cb10-40"><a href="#cb10-40"></a>      boot_out <span class="ot">&lt;-</span> <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">"robust"</span>) boot_results<span class="sc">$</span>robust_out <span class="cf">else</span> boot_results<span class="sc">$</span>ols_out</span>
+<span id="cb10-41"><a href="#cb10-41"></a></span>
+<span id="cb10-42"><a href="#cb10-42"></a>      <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(boot_out) <span class="sc">&amp;&amp;</span> <span class="sc">!</span><span class="fu">is.null</span>(boot_out<span class="sc">$</span>bootstrap_estimates)) {</span>
+<span id="cb10-43"><a href="#cb10-43"></a>        model_output<span class="sc">$</span>bootstrap_estimates <span class="ot">&lt;-</span> boot_out<span class="sc">$</span>bootstrap_estimates</span>
+<span id="cb10-44"><a href="#cb10-44"></a>        model_output<span class="sc">$</span>confidence_intervals <span class="ot">&lt;-</span> boot_out<span class="sc">$</span>conf_int</span>
+<span id="cb10-45"><a href="#cb10-45"></a>        model_output<span class="sc">$</span>valid_bootstrap_count <span class="ot">&lt;-</span> boot_out<span class="sc">$</span>valid_samples</span>
+<span id="cb10-46"><a href="#cb10-46"></a>        model_output<span class="sc">$</span>bootstrap_convergence_rate <span class="ot">&lt;-</span> boot_out<span class="sc">$</span>valid_samples <span class="sc">/</span> n_boots</span>
+<span id="cb10-47"><a href="#cb10-47"></a>        model_output<span class="sc">$</span>p_values <span class="ot">&lt;-</span> <span class="fu">bootstrap_pvalues</span>(</span>
+<span id="cb10-48"><a href="#cb10-48"></a>          boot_out<span class="sc">$</span>bootstrap_estimates, model_output<span class="sc">$</span>coefficients</span>
+<span id="cb10-49"><a href="#cb10-49"></a>        )</span>
+<span id="cb10-50"><a href="#cb10-50"></a>        model_output<span class="sc">$</span>bootstrap_quality_score <span class="ot">&lt;-</span> boot_out<span class="sc">$</span>valid_samples <span class="sc">/</span> n_boots</span>
+<span id="cb10-51"><a href="#cb10-51"></a>      }</span>
+<span id="cb10-52"><a href="#cb10-52"></a>    }</span>
+<span id="cb10-53"><a href="#cb10-53"></a>  }</span>
+<span id="cb10-54"><a href="#cb10-54"></a></span>
+<span id="cb10-55"><a href="#cb10-55"></a>  model_output</span>
+<span id="cb10-56"><a href="#cb10-56"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div class="cell column-body">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1"></a><span class="co"># main analysis function with bootstrap support</span></span>
+<span id="cb11-2"><a href="#cb11-2"></a>robust_analysis_bootstrap <span class="ot">&lt;-</span> <span class="cf">function</span>(data, form, <span class="at">n_boots =</span> <span class="cn">NULL</span>, <span class="at">pct =</span> <span class="fl">0.95</span>,</span>
+<span id="cb11-3"><a href="#cb11-3"></a>                                      <span class="at">alpha =</span> <span class="fl">0.05</span>, <span class="at">delta =</span> <span class="fl">0.01</span>, <span class="at">ctrl =</span> <span class="cn">NULL</span>,</span>
+<span id="cb11-4"><a href="#cb11-4"></a>                                      <span class="at">seed =</span> <span class="dv">625</span>, <span class="at">psi =</span> <span class="st">"bisquare"</span>, <span class="at">std_data =</span> <span class="cn">TRUE</span>) {</span>
+<span id="cb11-5"><a href="#cb11-5"></a>  <span class="fu">set.seed</span>(seed, <span class="at">kind =</span> <span class="st">"default"</span>)</span>
+<span id="cb11-6"><a href="#cb11-6"></a></span>
+<span id="cb11-7"><a href="#cb11-7"></a>  <span class="cf">if</span> (std_data) data <span class="ot">&lt;-</span> <span class="fu">standardize</span>(data)</span>
+<span id="cb11-8"><a href="#cb11-8"></a></span>
+<span id="cb11-9"><a href="#cb11-9"></a>  mm_list <span class="ot">&lt;-</span> <span class="fu">prepare_model_matrices</span>(form, data)</span>
+<span id="cb11-10"><a href="#cb11-10"></a>  dm <span class="ot">&lt;-</span> mm_list<span class="sc">$</span>design_matrix</span>
+<span id="cb11-11"><a href="#cb11-11"></a>  resp <span class="ot">&lt;-</span> mm_list<span class="sc">$</span>response</span>
+<span id="cb11-12"><a href="#cb11-12"></a></span>
+<span id="cb11-13"><a href="#cb11-13"></a>  min_boots <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(n_boots) <span class="sc">&amp;&amp;</span> n_boots <span class="sc">&gt;</span> <span class="dv">0</span>) {</span>
+<span id="cb11-14"><a href="#cb11-14"></a>    <span class="fu">message</span>(glue<span class="sc">::</span><span class="fu">glue</span>(<span class="st">"Bootstrap enabled with {n_boots} iterations."</span>))</span>
+<span id="cb11-15"><a href="#cb11-15"></a>    n_boots</span>
+<span id="cb11-16"><a href="#cb11-16"></a>  } <span class="cf">else</span> {</span>
+<span id="cb11-17"><a href="#cb11-17"></a>    n_boots <span class="ot">&lt;-</span> <span class="dv">0</span></span>
+<span id="cb11-18"><a href="#cb11-18"></a>    <span class="fu">message</span>(<span class="st">"Bootstrapping disabled. Fitting robust and OLS models only."</span>)</span>
+<span id="cb11-19"><a href="#cb11-19"></a>    <span class="cn">NA_integer_</span></span>
+<span id="cb11-20"><a href="#cb11-20"></a>  }</span>
+<span id="cb11-21"><a href="#cb11-21"></a></span>
+<span id="cb11-22"><a href="#cb11-22"></a>  ctrl <span class="ot">&lt;-</span> <span class="fu">create_lmrob_control</span>(ctrl, psi)</span>
+<span id="cb11-23"><a href="#cb11-23"></a>  fits <span class="ot">&lt;-</span> <span class="fu">fit_models</span>(data, form, ctrl)</span>
+<span id="cb11-24"><a href="#cb11-24"></a></span>
+<span id="cb11-25"><a href="#cb11-25"></a>  robust_results <span class="ot">&lt;-</span> <span class="fu">process_model_bootstrap</span>(</span>
+<span id="cb11-26"><a href="#cb11-26"></a>    fits<span class="sc">$</span>robust_fit, <span class="st">"robust"</span>, n_boots, min_boots, data, resp, dm, ctrl, pct,</span>
+<span id="cb11-27"><a href="#cb11-27"></a>    <span class="at">seed =</span> seed</span>
+<span id="cb11-28"><a href="#cb11-28"></a>  )</span>
+<span id="cb11-29"><a href="#cb11-29"></a>  ols_results <span class="ot">&lt;-</span> <span class="fu">process_model_bootstrap</span>(</span>
+<span id="cb11-30"><a href="#cb11-30"></a>    fits<span class="sc">$</span>ols_fit, <span class="st">"ols"</span>, n_boots, min_boots, data, resp, dm, ctrl, pct,</span>
+<span id="cb11-31"><a href="#cb11-31"></a>    <span class="at">seed =</span> seed</span>
+<span id="cb11-32"><a href="#cb11-32"></a>  )</span>
+<span id="cb11-33"><a href="#cb11-33"></a></span>
+<span id="cb11-34"><a href="#cb11-34"></a>  analysis_results <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb11-35"><a href="#cb11-35"></a>    <span class="at">robust_model_results =</span> <span class="fu">list</span>(</span>
+<span id="cb11-36"><a href="#cb11-36"></a>      <span class="at">model_object =</span> fits<span class="sc">$</span>robust_fit,</span>
+<span id="cb11-37"><a href="#cb11-37"></a>      <span class="at">analysis_output =</span> robust_results</span>
+<span id="cb11-38"><a href="#cb11-38"></a>    ),</span>
+<span id="cb11-39"><a href="#cb11-39"></a>    <span class="at">ols_model_results =</span> <span class="fu">list</span>(</span>
+<span id="cb11-40"><a href="#cb11-40"></a>      <span class="at">model_object =</span> fits<span class="sc">$</span>ols_fit,</span>
+<span id="cb11-41"><a href="#cb11-41"></a>      <span class="at">analysis_output =</span> ols_results</span>
+<span id="cb11-42"><a href="#cb11-42"></a>    ),</span>
+<span id="cb11-43"><a href="#cb11-43"></a>    <span class="at">analysis_metadata =</span> <span class="fu">list</span>(</span>
+<span id="cb11-44"><a href="#cb11-44"></a>      <span class="at">total_observations =</span> <span class="fu">nrow</span>(data),</span>
+<span id="cb11-45"><a href="#cb11-45"></a>      <span class="at">number_of_predictors =</span> <span class="fu">ncol</span>(dm),</span>
+<span id="cb11-46"><a href="#cb11-46"></a>      <span class="at">bootstrap_iterations =</span> n_boots,</span>
+<span id="cb11-47"><a href="#cb11-47"></a>      <span class="at">minimum_required_bootstraps =</span> min_boots,</span>
+<span id="cb11-48"><a href="#cb11-48"></a>      <span class="at">analysis_timestamp =</span> <span class="fu">Sys.time</span>(),</span>
+<span id="cb11-49"><a href="#cb11-49"></a>      <span class="at">robustbase_version =</span> utils<span class="sc">::</span><span class="fu">packageVersion</span>(<span class="st">"robustbase"</span>)</span>
+<span id="cb11-50"><a href="#cb11-50"></a>    ),</span>
+<span id="cb11-51"><a href="#cb11-51"></a>    <span class="at">detailed_outputs =</span> <span class="fu">list</span>(<span class="at">robust =</span> robust_results, <span class="at">ols =</span> ols_results)</span>
+<span id="cb11-52"><a href="#cb11-52"></a>  )</span>
+<span id="cb11-53"><a href="#cb11-53"></a></span>
+<span id="cb11-54"><a href="#cb11-54"></a>  <span class="fu">class</span>(analysis_results) <span class="ot">&lt;-</span> <span class="st">"structured_models"</span></span>
+<span id="cb11-55"><a href="#cb11-55"></a>  analysis_results</span>
+<span id="cb11-56"><a href="#cb11-56"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div class="cell column-body">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1"></a><span class="co"># byte compile performance-critical functions</span></span>
+<span id="cb12-2"><a href="#cb12-2"></a>min_bootstrap_iterations <span class="ot">&lt;-</span> compiler<span class="sc">::</span><span class="fu">cmpfun</span>(min_bootstrap_iterations)</span>
+<span id="cb12-3"><a href="#cb12-3"></a>bootstrap_pvalues <span class="ot">&lt;-</span> compiler<span class="sc">::</span><span class="fu">cmpfun</span>(bootstrap_pvalues)</span>
+<span id="cb12-4"><a href="#cb12-4"></a>bootstrap_linear_model <span class="ot">&lt;-</span> compiler<span class="sc">::</span><span class="fu">cmpfun</span>(bootstrap_linear_model)</span>
+<span id="cb12-5"><a href="#cb12-5"></a>evaluate_boot_stats <span class="ot">&lt;-</span> compiler<span class="sc">::</span><span class="fu">cmpfun</span>(evaluate_boot_stats)</span>
+<span id="cb12-6"><a href="#cb12-6"></a>weighted_bootstrap <span class="ot">&lt;-</span> compiler<span class="sc">::</span><span class="fu">cmpfun</span>(weighted_bootstrap)</span>
+<span id="cb12-7"><a href="#cb12-7"></a>parallel_bootstrap <span class="ot">&lt;-</span> compiler<span class="sc">::</span><span class="fu">cmpfun</span>(parallel_bootstrap)</span>
+<span id="cb12-8"><a href="#cb12-8"></a>process_model_bootstrap <span class="ot">&lt;-</span> compiler<span class="sc">::</span><span class="fu">cmpfun</span>(process_model_bootstrap)</span>
+<span id="cb12-9"><a href="#cb12-9"></a>robust_analysis_bootstrap <span class="ot">&lt;-</span> compiler<span class="sc">::</span><span class="fu">cmpfun</span>(robust_analysis_bootstrap)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="load-data-and-model-specifications" class="level2 page-columns page-full" data-number="3">
+<h2 data-number="3" class="anchored" data-anchor-id="load-data-and-model-specifications"><span class="header-section-number">3</span> Load Data and Model Specifications</h2>
+<div class="cell column-body">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1"></a><span class="co"># paths to input files</span></span>
+<span id="cb13-2"><a href="#cb13-2"></a>data_path <span class="ot">&lt;-</span> here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"assets"</span>, <span class="st">"data"</span>, <span class="st">"saved"</span>, <span class="st">"adjusted_data.rds"</span>)</span>
+<span id="cb13-3"><a href="#cb13-3"></a>models_path <span class="ot">&lt;-</span> here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"assets"</span>, <span class="st">"models"</span>, <span class="st">"models.rds"</span>)</span>
+<span id="cb13-4"><a href="#cb13-4"></a>models_dir <span class="ot">&lt;-</span> here<span class="sc">::</span><span class="fu">here</span>(<span class="st">"assets"</span>, <span class="st">"models"</span>)</span>
+<span id="cb13-5"><a href="#cb13-5"></a></span>
+<span id="cb13-6"><a href="#cb13-6"></a><span class="co"># consolidated output path (gated by recompute_heavy below)</span></span>
+<span id="cb13-7"><a href="#cb13-7"></a>consolidated_path <span class="ot">&lt;-</span> <span class="fu">file.path</span>(models_dir, glue<span class="sc">::</span><span class="fu">glue</span>(<span class="st">"{type}_fits.rds"</span>))</span>
+<span id="cb13-8"><a href="#cb13-8"></a></span>
+<span id="cb13-9"><a href="#cb13-9"></a><span class="co"># validate inputs exist</span></span>
+<span id="cb13-10"><a href="#cb13-10"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">file.exists</span>(data_path)) <span class="fu">stop</span>(<span class="st">"Missing input from Step 8: "</span>, data_path)</span>
+<span id="cb13-11"><a href="#cb13-11"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">file.exists</span>(models_path)) <span class="fu">stop</span>(<span class="st">"Missing model specifications from Step 7: "</span>, models_path)</span>
+<span id="cb13-12"><a href="#cb13-12"></a></span>
+<span id="cb13-13"><a href="#cb13-13"></a><span class="co"># load inputs</span></span>
+<span id="cb13-14"><a href="#cb13-14"></a>adjusted_data <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(data_path)</span>
+<span id="cb13-15"><a href="#cb13-15"></a>model_specs <span class="ot">&lt;-</span> <span class="fu">readRDS</span>(models_path)</span>
+<span id="cb13-16"><a href="#cb13-16"></a></span>
+<span id="cb13-17"><a href="#cb13-17"></a><span class="co"># ensure models directory exists</span></span>
+<span id="cb13-18"><a href="#cb13-18"></a><span class="cf">if</span> (<span class="sc">!</span><span class="fu">dir.exists</span>(models_dir)) <span class="fu">dir.create</span>(models_dir, <span class="at">recursive =</span> <span class="cn">TRUE</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1"></a>n_obs <span class="ot">&lt;-</span> <span class="fu">nrow</span>(adjusted_data)</span>
+<span id="cb14-2"><a href="#cb14-2"></a>n_vars <span class="ot">&lt;-</span> <span class="fu">ncol</span>(adjusted_data)</span>
+<span id="cb14-3"><a href="#cb14-3"></a>n_models <span class="ot">&lt;-</span> <span class="fu">length</span>(model_specs)</span>
+<span id="cb14-4"><a href="#cb14-4"></a></span>
+<span id="cb14-5"><a href="#cb14-5"></a>verify_msg <span class="ot">&lt;-</span> glue<span class="sc">::</span><span class="fu">glue</span>(</span>
+<span id="cb14-6"><a href="#cb14-6"></a>  <span class="st">"&lt;div class='callout-note'&gt;</span></span>
+<span id="cb14-7"><a href="#cb14-7"></a><span class="st">&lt;strong&gt;Step 8 Data Verification&lt;/strong&gt;&lt;br&gt;&lt;br&gt;</span></span>
+<span id="cb14-8"><a href="#cb14-8"></a><span class="st">&lt;strong&gt;Input:&lt;/strong&gt; &lt;code&gt;adjusted_data.rds&lt;/code&gt; ({n_obs} observations, {n_vars} variables)&lt;br&gt;</span></span>
+<span id="cb14-9"><a href="#cb14-9"></a><span class="st">&lt;strong&gt;Source:&lt;/strong&gt; Sensitivity dataset from Step 8 (influential observations removed)&lt;br&gt;</span></span>
+<span id="cb14-10"><a href="#cb14-10"></a><span class="st">&lt;strong&gt;Models:&lt;/strong&gt; {n_models} model specifications loaded from Step 7&lt;br&gt;</span></span>
+<span id="cb14-11"><a href="#cb14-11"></a><span class="st">&lt;strong&gt;Bootstrap iterations:&lt;/strong&gt; {bootstrap_params$n_boots}</span></span>
+<span id="cb14-12"><a href="#cb14-12"></a><span class="st">&lt;/div&gt;"</span></span>
+<span id="cb14-13"><a href="#cb14-13"></a>)</span>
+<span id="cb14-14"><a href="#cb14-14"></a><span class="fu">cat</span>(verify_msg)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Note
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><strong>Step 8 Data Verification</strong><br><br> <strong>Input:</strong> <code>adjusted_data.rds</code> (908 observations, 17 variables)<br> <strong>Source:</strong> Sensitivity dataset from Step 8 (influential observations removed)<br> <strong>Models:</strong> 12 model specifications loaded from Step 7<br> <strong>Bootstrap iterations:</strong> 5000</p>
+</div>
+</div>
+</section>
+<section id="model-hypothesis-mapping" class="level2" data-number="4">
+<h2 data-number="4" class="anchored" data-anchor-id="model-hypothesis-mapping"><span class="header-section-number">4</span> Model-Hypothesis Mapping</h2>
+<p><strong>Baseline and Composite SES Models (Models 0–6):</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 7%">
+<col style="width: 39%">
+<col style="width: 36%">
+<col style="width: 16%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Model</th>
+<th>Description</th>
+<th>Tests</th>
+<th>Hypotheses</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td>Null (intercept only)</td>
+<td>Baseline</td>
+<td>–</td>
+</tr>
+<tr class="even">
+<td>1</td>
+<td>Adult covariates + own SES</td>
+<td>Adjustment set</td>
+<td>–</td>
+</tr>
+<tr class="odd">
+<td>2</td>
+<td>+ Parental SES (composite)</td>
+<td>Parental SES main effects</td>
+<td>H1, RQ1</td>
+</tr>
+<tr class="even">
+<td>3</td>
+<td>+ Partner SES</td>
+<td>Partner SES main effects</td>
+<td>H2, RQ2</td>
+</tr>
+<tr class="odd">
+<td>4</td>
+<td>+ Gender × SES interactions</td>
+<td>Gender moderation</td>
+<td>H3, H4, RQ3</td>
+</tr>
+<tr class="even">
+<td>5</td>
+<td>+ Parental × Partner SES</td>
+<td>SES synergy</td>
+<td>H5, RQ4</td>
+</tr>
+<tr class="odd">
+<td>6</td>
+<td>+ Gender × synergy</td>
+<td>Gender-moderated synergy</td>
+<td>H6, RQ4</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Disaggregated SES Models (Models 7–11):</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 6%">
+<col style="width: 44%">
+<col style="width: 35%">
+<col style="width: 13%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Model</th>
+<th>Description</th>
+<th>Tests</th>
+<th>Hypotheses</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>7</td>
+<td>Covariates + Mother SES + Father SES</td>
+<td>Differential parental effects</td>
+<td>H1, RQ1</td>
+</tr>
+<tr class="even">
+<td>8</td>
+<td>+ Partner SES (disaggregated)</td>
+<td>Partner SES main effects</td>
+<td>H2, RQ2</td>
+</tr>
+<tr class="odd">
+<td>9</td>
+<td>+ Gender × Mother/Father/Partner SES</td>
+<td>Gender moderation by parent</td>
+<td>H3, H4, RQ3</td>
+</tr>
+<tr class="even">
+<td>10</td>
+<td>+ Mother × Partner, Father × Partner</td>
+<td>Parent-specific synergy</td>
+<td>H5, RQ4</td>
+</tr>
+<tr class="odd">
+<td>11</td>
+<td>+ Gender × synergy terms</td>
+<td>Gender-moderated synergy</td>
+<td>H6, RQ4</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="fit-all-models" class="level2 page-columns page-full" data-number="5">
+<h2 data-number="5" class="anchored" data-anchor-id="fit-all-models"><span class="header-section-number">5</span> Fit All Models</h2>
+<div class="cell column-body">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1"></a><span class="co"># reuse cached fits when available, otherwise refit the full nested set</span></span>
+<span id="cb15-2"><a href="#cb15-2"></a><span class="cf">if</span> (<span class="sc">!</span>recompute_heavy <span class="sc">&amp;&amp;</span> <span class="fu">file.exists</span>(consolidated_path)) {</span>
+<span id="cb15-3"><a href="#cb15-3"></a>  <span class="fu">message</span>(<span class="st">"cached fits found; skipping model fitting (set recompute_heavy &lt;- TRUE to refit)"</span>)</span>
+<span id="cb15-4"><a href="#cb15-4"></a>} <span class="cf">else</span> {</span>
+<span id="cb15-5"><a href="#cb15-5"></a>  <span class="co"># fit all models using purrr::imap for named iteration</span></span>
+<span id="cb15-6"><a href="#cb15-6"></a>  all_fits <span class="ot">&lt;-</span> purrr<span class="sc">::</span><span class="fu">imap</span>(model_specs, <span class="cf">function</span>(model_formula, model_name) {</span>
+<span id="cb15-7"><a href="#cb15-7"></a>    <span class="fu">message</span>(glue<span class="sc">::</span><span class="fu">glue</span>(<span class="st">"</span><span class="sc">\n</span><span class="st">{strrep('=', 60)}</span><span class="sc">\n</span><span class="st">Fitting {model_name}...</span><span class="sc">\n</span><span class="st">"</span>))</span>
+<span id="cb15-8"><a href="#cb15-8"></a></span>
+<span id="cb15-9"><a href="#cb15-9"></a>    fit_result <span class="ot">&lt;-</span> <span class="fu">robust_analysis_bootstrap</span>(</span>
+<span id="cb15-10"><a href="#cb15-10"></a>      <span class="at">data      =</span> adjusted_data,</span>
+<span id="cb15-11"><a href="#cb15-11"></a>      <span class="at">form      =</span> model_formula,</span>
+<span id="cb15-12"><a href="#cb15-12"></a>      <span class="at">n_boots   =</span> bootstrap_params<span class="sc">$</span>n_boots,</span>
+<span id="cb15-13"><a href="#cb15-13"></a>      <span class="at">pct       =</span> bootstrap_params<span class="sc">$</span>pct,</span>
+<span id="cb15-14"><a href="#cb15-14"></a>      <span class="at">alpha     =</span> bootstrap_params<span class="sc">$</span>alpha,</span>
+<span id="cb15-15"><a href="#cb15-15"></a>      <span class="at">delta     =</span> bootstrap_params<span class="sc">$</span>delta,</span>
+<span id="cb15-16"><a href="#cb15-16"></a>      <span class="at">ctrl      =</span> <span class="cn">NULL</span>,</span>
+<span id="cb15-17"><a href="#cb15-17"></a>      <span class="at">seed      =</span> bootstrap_params<span class="sc">$</span>seed,</span>
+<span id="cb15-18"><a href="#cb15-18"></a>      <span class="at">psi       =</span> robust_params<span class="sc">$</span>psi,</span>
+<span id="cb15-19"><a href="#cb15-19"></a>      <span class="at">std_data  =</span> robust_params<span class="sc">$</span>std_data</span>
+<span id="cb15-20"><a href="#cb15-20"></a>    )</span>
+<span id="cb15-21"><a href="#cb15-21"></a></span>
+<span id="cb15-22"><a href="#cb15-22"></a>    <span class="co"># save individual fit</span></span>
+<span id="cb15-23"><a href="#cb15-23"></a>    fit_filename <span class="ot">&lt;-</span> glue<span class="sc">::</span><span class="fu">glue</span>(<span class="st">"{type}_fit_{gsub('model_', '', model_name)}.rds"</span>)</span>
+<span id="cb15-24"><a href="#cb15-24"></a>    <span class="fu">saveRDS</span>(fit_result, <span class="fu">file.path</span>(models_dir, fit_filename))</span>
+<span id="cb15-25"><a href="#cb15-25"></a></span>
+<span id="cb15-26"><a href="#cb15-26"></a>    fit_result</span>
+<span id="cb15-27"><a href="#cb15-27"></a>  })</span>
+<span id="cb15-28"><a href="#cb15-28"></a></span>
+<span id="cb15-29"><a href="#cb15-29"></a>  <span class="co"># assign to individual objects for compatibility with downstream steps</span></span>
+<span id="cb15-30"><a href="#cb15-30"></a>  <span class="co"># vectorised, no loop: rename model_* -&gt; fit_* and bind into the chunk environment</span></span>
+<span id="cb15-31"><a href="#cb15-31"></a>  <span class="fu">list2env</span>(<span class="fu">setNames</span>(all_fits, <span class="fu">sub</span>(<span class="st">"^model"</span>, <span class="st">"fit"</span>, <span class="fu">names</span>(all_fits))), <span class="fu">environment</span>())</span>
+<span id="cb15-32"><a href="#cb15-32"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="save-consolidated-model-fits" class="level2 page-columns page-full" data-number="6">
+<h2 data-number="6" class="anchored" data-anchor-id="save-consolidated-model-fits"><span class="header-section-number">6</span> Save Consolidated Model Fits</h2>
+<div class="cell column-body">
+<details open="" class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb16"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1"></a><span class="co"># rebuild and persist the consolidated list only when (re)fitting</span></span>
+<span id="cb16-2"><a href="#cb16-2"></a><span class="cf">if</span> (recompute_heavy <span class="sc">||</span> <span class="sc">!</span><span class="fu">file.exists</span>(consolidated_path)) {</span>
+<span id="cb16-3"><a href="#cb16-3"></a>  consolidated_fits <span class="ot">&lt;-</span> <span class="fu">named_list</span>(</span>
+<span id="cb16-4"><a href="#cb16-4"></a>    fit_0, fit_1, fit_2, fit_3, fit_4, fit_5, fit_6,</span>
+<span id="cb16-5"><a href="#cb16-5"></a>    fit_7, fit_8, fit_9, fit_10, fit_11</span>
+<span id="cb16-6"><a href="#cb16-6"></a>  )</span>
+<span id="cb16-7"><a href="#cb16-7"></a></span>
+<span id="cb16-8"><a href="#cb16-8"></a>  <span class="fu">saveRDS</span>(consolidated_fits, consolidated_path)</span>
+<span id="cb16-9"><a href="#cb16-9"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode numberSource r number-lines code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1"></a>export_msg <span class="ot">&lt;-</span> glue<span class="sc">::</span><span class="fu">glue</span>(</span>
+<span id="cb17-2"><a href="#cb17-2"></a>  <span class="st">"&lt;div class='callout-note'&gt;</span></span>
+<span id="cb17-3"><a href="#cb17-3"></a><span class="st">&lt;strong&gt;Exported Files&lt;/strong&gt;&lt;br&gt;&lt;br&gt;</span></span>
+<span id="cb17-4"><a href="#cb17-4"></a><span class="st">&lt;strong&gt;Model specifications:&lt;/strong&gt; Loaded from Step 7 ({length(model_specs)} models)&lt;br&gt;</span></span>
+<span id="cb17-5"><a href="#cb17-5"></a><span class="st">&lt;strong&gt;Analysis dataset:&lt;/strong&gt; &lt;code&gt;adjusted_data.rds&lt;/code&gt; ({nrow(adjusted_data)} observations)&lt;br&gt;</span></span>
+<span id="cb17-6"><a href="#cb17-6"></a><span class="st">&lt;strong&gt;Individual fits:&lt;/strong&gt; &lt;code&gt;adjusted_fit_0.rds&lt;/code&gt; through &lt;code&gt;adjusted_fit_11.rds&lt;/code&gt;&lt;br&gt;</span></span>
+<span id="cb17-7"><a href="#cb17-7"></a><span class="st">&lt;strong&gt;Consolidated fits:&lt;/strong&gt; &lt;code&gt;adjusted_fits.rds&lt;/code&gt;&lt;br&gt;&lt;br&gt;</span></span>
+<span id="cb17-8"><a href="#cb17-8"></a><span class="st">&lt;strong&gt;Composite models (2–6):&lt;/strong&gt; Use education_parental, isei08_parental, education_partner, isei08_partner&lt;br&gt;</span></span>
+<span id="cb17-9"><a href="#cb17-9"></a><span class="st">&lt;strong&gt;Disaggregated models (7–11):&lt;/strong&gt; Use education/isei08 × mother/father/partner&lt;br&gt;&lt;br&gt;</span></span>
+<span id="cb17-10"><a href="#cb17-10"></a><span class="st">All files saved to: &lt;code&gt;{models_dir}&lt;/code&gt;</span></span>
+<span id="cb17-11"><a href="#cb17-11"></a><span class="st">&lt;/div&gt;"</span></span>
+<span id="cb17-12"><a href="#cb17-12"></a>)</span>
+<span id="cb17-13"><a href="#cb17-13"></a><span class="fu">cat</span>(export_msg)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Note
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p><strong>Exported Files</strong><br><br> <strong>Model specifications:</strong> Loaded from Step 7 (12 models)<br> <strong>Analysis dataset:</strong> <code>adjusted_data.rds</code> (908 observations)<br> <strong>Individual fits:</strong> <code>adjusted_fit_0.rds</code> through <code>adjusted_fit_11.rds</code><br> <strong>Consolidated fits:</strong> <code>adjusted_fits.rds</code><br><br> <strong>Composite models (2–6):</strong> Use education_parental, isei08_parental, education_partner, isei08_partner<br> <strong>Disaggregated models (7–11):</strong> Use education/isei08 × mother/father/partner<br><br> All files saved to: <code>/Users/siardv/Dropbox/DHD-SEP-PPG/assets/models</code></p>
+</div>
+</div>
+<div style="margin-block-end: 2rem;">
+
+</div>
+</section>
+<section id="output" class="level2" data-number="7">
+<h2 data-number="7" class="anchored" data-anchor-id="output"><span class="header-section-number">7</span> Output</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 43%">
+<col style="width: 56%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>File</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>assets/models/adjusted_fit_{0..11}.rds</code></td>
+<td>Per-model robust fits with bootstrap output</td>
+</tr>
+<tr class="even">
+<td><code>assets/models/adjusted_fits.rds</code></td>
+<td>Named list consolidating all 12 adjusted model fits</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Next:</strong> <a href="../../../analysis/models/goodness-of-fit/model-fit/index.html">Step 10 (Initial Model Evaluation)</a></p>
+
+
+</section>
+
+<a onclick="window.scrollTo(0, 0); return false;" role="button" id="quarto-back-to-top"><i class="bi bi-arrow-up"></i> Back to top</a></main> <!-- /main -->
+<script>
+  function updateFooter(tfoot) {
+    const td = tfoot.querySelector("td");
+    if (td) {
+      tfoot.innerHTML = `<td colspan="100%" style="text-align: left;">${td.innerHTML}</td>`;
+    }
+    tfoot.style.fontSize = "0.9em";
+  }
+
+  function setClassToString() {
+    document.querySelectorAll(".sc.slash").forEach((element) => {
+      element.classList.replace("sc", "st");
+    });
+
+    // fix escaped quotes and special characters inside strings
+    // these are marked as 'sc' by pandoc but should be styled as strings
+    document.querySelectorAll("code.sourceCode .sc").forEach((element) => {
+      const text = element.textContent;
+      // check if this is an escape sequence that should be part of a string
+      if (
+        text === '\\"' ||
+        text === "\\'" ||
+        text === "\\\\" ||
+        (text.startsWith("\\") &&
+          element.previousElementSibling?.classList.contains("st"))
+      ) {
+        element.classList.add("st");
+        element.classList.remove("sc");
+      }
+      // also check if surrounded by string elements
+      const prev = element.previousElementSibling;
+      const next = element.nextElementSibling;
+      if (
+        (prev?.classList.contains("st") || next?.classList.contains("st")) &&
+        text.startsWith("\\")
+      ) {
+        element.classList.add("st");
+        element.classList.remove("sc");
+      }
+    });
+  }
+
+  function wrapOperatorsInSpans() {
+    function isInsideStringOrComment(node) {
+      let parent = node.parentElement;
+      while (parent && parent.tagName !== "CODE") {
+        if (
+          parent.classList.contains("st") ||
+          parent.classList.contains("co")
+        ) {
+          return true;
+        }
+        parent = parent.parentElement;
+      }
+      return false;
+    }
+
+    function processTextNode(textNode) {
+      if (isInsideStringOrComment(textNode)) {
+        return;
+      }
+
+      const text = textNode.textContent;
+      if (!text.includes("=") && !text.includes("&")) {
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      let lastIndex = 0;
+
+      // match: && first, then standalone & (not part of &&), then standalone =
+      const regex = /(&&)|(&(?!&))|((?<![=!<>:])=(?!=))/g;
+      let match;
+
+      while ((match = regex.exec(text)) !== null) {
+        if (lastIndex < match.index) {
+          fragment.appendChild(
+            document.createTextNode(text.slice(lastIndex, match.index)),
+          );
+        }
+        const span = document.createElement("span");
+        if (match[1]) {
+          span.className = "logicaland";
+        } else if (match[2]) {
+          span.className = "ampersand";
+        } else {
+          span.className = "equals";
+        }
+        span.textContent = match[0];
+        fragment.appendChild(span);
+        lastIndex = match.index + match[0].length;
+      }
+
+      if (lastIndex > 0) {
+        if (lastIndex < text.length) {
+          fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+        }
+        textNode.parentNode.replaceChild(fragment, textNode);
+      }
+    }
+
+    document.querySelectorAll("code.sourceCode.r").forEach((code) => {
+      const walker = document.createTreeWalker(
+        code,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false,
+      );
+
+      const textNodes = [];
+      while (walker.nextNode()) {
+        textNodes.push(walker.currentNode);
+      }
+
+      textNodes.forEach(processTextNode);
+    });
+  }
+
+  function hideCodeBlocksStartingWith(searchText) {
+    if (!searchText || typeof searchText !== "string") {
+      console.error("Invalid searchText: must be a non-empty string.");
+      return;
+    }
+
+    const codeBlocks = document.querySelectorAll("code");
+    codeBlocks.forEach((codeBlock) => {
+      if (codeBlock.textContent.trim().startsWith(searchText)) {
+        codeBlock.style.display = "none";
+      }
+    });
+  }
+
+  function injectFigcaptionStyleInline() {
+    const figcaptions = document.querySelectorAll("figcaption");
+    figcaptions.forEach((element) => {
+      element.style.fontSize = "1.0em";
+      element.style.fontStyle = "italic";
+      element.style.textAlign = "center";
+    });
+  }
+
+  function openLinksInNewTab() {
+    document.querySelectorAll("a[href]").forEach((link) => {
+      const href = link.getAttribute("href");
+      // keep in-page anchors (toc, footnotes, citations, code-line
+      // numbers), script links, and bootstrap toggles in the same tab
+      if (
+        href.startsWith("#") ||
+        href.startsWith("javascript:") ||
+        link.hasAttribute("data-bs-toggle")
+      ) {
+        return;
+      }
+      link.setAttribute("target", "_blank");
+      link.setAttribute("rel", "noopener noreferrer");
+    });
+  }
+
+  function adjustLastCells() {
+    const panels = document.querySelectorAll("[class*=quarto-layout-panel]");
+    panels.forEach((panel) => {
+      const lastCell = [...panel.querySelectorAll(".quarto-layout-cell")].pop();
+      if (lastCell) {
+        const figcaption = document.createElement("figcaption");
+        figcaption.innerHTML = lastCell.innerHTML;
+        figcaption.style.fontSize = "1.0em";
+        figcaption.style.fontStyle = "italic";
+        figcaption.style.textAlign = "center";
+        lastCell.innerHTML = "";
+        lastCell.appendChild(figcaption);
+      }
+    });
+  }
+
+  function setHeaderNumbering() {
+    // pages define window.config inline; guard so its absence
+    // cannot throw and abort the remaining initialization
+    if (window.config?.offset === undefined) {
+      return;
+    }
+
+    // fix main content headers - exclude toc-title
+    document
+      .querySelectorAll("h1, h2, h3, h4, h5, h6")
+      .forEach((headerElement) => {
+        // skip the TOC title
+        if (headerElement.id === "toc-title") {
+          return;
+        }
+
+        let sectionNumber = headerElement.getAttribute("data-number");
+
+        if (!sectionNumber) {
+          let autoNumber =
+            Array.from(headerElement.parentNode.children)
+              .filter((el) => el.tagName.match(/^H[1-6]$/))
+              .indexOf(headerElement) + 1;
+
+          sectionNumber = autoNumber.toString();
+          headerElement.setAttribute("data-number", sectionNumber);
+        }
+
+        let sectionSpan = headerElement.querySelector(".header-section-number");
+        if (!sectionSpan) {
+          sectionSpan = document.createElement("span");
+          sectionSpan.classList.add("header-section-number");
+          headerElement.prepend(sectionSpan);
+        }
+
+        const level = parseInt(headerElement.tagName.substring(1));
+        const baseParts = sectionNumber
+          .split(".")
+          .slice(0, level === 1 ? 0 : level - 1)
+          .join(".");
+
+        sectionSpan.innerHTML =
+          level === 1
+            ? `${window.config.offset}.&nbsp;`
+            : `${window.config.offset}.${baseParts}`;
+      });
+
+    // fix sidebar TOC entries - prepend offset, don't replace
+    document.querySelectorAll("#TOC .header-section-number").forEach((span) => {
+      const original = span.textContent.trim();
+      if (!original) return;
+
+      span.textContent = `${window.config.offset}.${original}`;
+    });
+  }
+
+  function applyHeaderTheme() {
+    // paper-like masthead: white ground, single hairline rule, ink-on-paper
+    // text, quiet hover underlines; overrides bootstrap's navbar variables
+    if (document.getElementById("header-theme-style")) return;
+
+    // dark-stroke toggler icon (the markup may carry data-bs-theme="dark",
+    // which would otherwise draw white lines on the white header)
+    const togglerIcon =
+      `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' ` +
+      `viewBox='0 0 30 30'%3e%3cpath stroke='rgba%280, 0, 0, 0.6%29' ` +
+      `stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' ` +
+      `d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e")`;
+
+    const style = document.createElement("style");
+    style.id = "header-theme-style";
+    style.textContent = `
+      #quarto-header {
+        box-shadow: none !important;
+      }
+      #quarto-header .navbar {
+        --bs-navbar-color: rgba(0, 0, 0, .62);
+        --bs-navbar-hover-color: rgba(0, 0, 0, .95);
+        --bs-navbar-active-color: rgba(0, 0, 0, .95);
+        --bs-navbar-disabled-color: rgba(0, 0, 0, .3);
+        --bs-navbar-brand-color: rgba(0, 0, 0, .85);
+        --bs-navbar-brand-hover-color: rgba(0, 0, 0, .95);
+        --bs-navbar-toggler-border-color: transparent;
+        --bs-navbar-toggler-icon-bg: ${togglerIcon};
+        background: #fff;
+        border-bottom: 1px solid rgba(0, 0, 0, .12);
+        box-shadow: none;
+        padding-block: .45rem;
+      }
+
+      /* brand as a small-caps masthead title */
+      #quarto-header .navbar-brand {
+        font-size: 1.05rem;
+        font-variant: small-caps;
+        letter-spacing: .04em;
+        text-decoration: none;
+      }
+
+      /* menu links: even rhythm, slight tracking, no boxes */
+      #quarto-header .navbar-nav .nav-link {
+        font-size: .95rem;
+        letter-spacing: .01em;
+        padding-block: .3rem;
+      }
+      #quarto-header .navbar-nav .nav-link:hover,
+      #quarto-header .navbar-nav .nav-link:focus-visible {
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: .4em;
+        text-decoration-color: rgba(0, 0, 0, .35);
+      }
+
+      /* numbering prefixes recede behind the labels */
+      #quarto-header .nav-number {
+        color: rgba(0, 0, 0, .45);
+        font-variant-numeric: oldstyle-nums;
+      }
+
+      /* smaller, fainter dropdown caret */
+      #quarto-header .navbar .dropdown-toggle::after {
+        border-top-width: .26em;
+        border-right-width: .26em;
+        border-left-width: .26em;
+        vertical-align: .14em;
+        margin-left: .32em;
+        opacity: .5;
+      }
+
+      /* dropdowns: flat white panels with a hairline edge */
+      #quarto-header .navbar .dropdown-menu {
+        --bs-dropdown-bg: #fff;
+        --bs-dropdown-color: rgba(0, 0, 0, .7);
+        --bs-dropdown-link-color: rgba(0, 0, 0, .7);
+        --bs-dropdown-link-hover-color: rgba(0, 0, 0, .95);
+        --bs-dropdown-link-hover-bg: rgba(0, 0, 0, .04);
+        --bs-dropdown-link-active-color: rgba(0, 0, 0, .95);
+        --bs-dropdown-link-active-bg: rgba(0, 0, 0, .06);
+        --bs-dropdown-border-color: rgba(0, 0, 0, .12);
+        --bs-dropdown-border-radius: 0;
+        background: #fff;
+        border: 1px solid rgba(0, 0, 0, .12);
+        border-radius: 0;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, .06);
+        padding-block: .35rem;
+        font-size: .95rem;
+        min-width: 15rem;
+      }
+      #quarto-header .navbar .dropdown-item {
+        padding: .4rem 1.1rem;
+      }
+
+      /* secondary (breadcrumb) bar follows the same idiom */
+      #quarto-header .quarto-secondary-nav {
+        background: #fff;
+        border-bottom: 1px solid rgba(0, 0, 0, .08);
+      }
+      #quarto-header .quarto-secondary-nav .quarto-btn-toggle {
+        color: rgba(0, 0, 0, .6);
+      }
+      #quarto-header .quarto-page-breadcrumbs .breadcrumb {
+        --bs-breadcrumb-divider-color: rgba(0, 0, 0, .45);
+        margin-bottom: 0;
+      }
+      #quarto-header .quarto-page-breadcrumbs .breadcrumb-item {
+        font-size: .9rem;
+        font-style: italic;
+        color: rgba(0, 0, 0, .55);
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function numberNavbarItems() {
+    // pass 1: leaf links (top-level direct links + dropdown entries).
+    // document order == navbar order == _quarto.yml order.
+    const leaves = document.querySelectorAll(
+      "#quarto-header .navbar a.nav-link:not(.dropdown-toggle), " +
+        "#quarto-header .navbar a.dropdown-item",
+    );
+    leaves.forEach((link, i) => {
+      let tag = link.querySelector(".nav-number");
+      if (!tag) {
+        tag = document.createElement("span");
+        tag.className = "nav-number";
+        link.prepend(tag);
+      }
+      tag.textContent = `${i + 1}. `;
+    });
+
+    // pass 2: parents report the range of their children's numbers.
+    document
+      .querySelectorAll("#quarto-header .navbar a.dropdown-toggle")
+      .forEach((toggle) => {
+        const item = toggle.closest(".nav-item");
+        const nums = [...item.querySelectorAll(".dropdown-menu .nav-number")]
+          .map((n) => parseInt(n.textContent, 10))
+          .filter((n) => !isNaN(n));
+        if (nums.length === 0) return;
+
+        const lo = Math.min(...nums);
+        const hi = Math.max(...nums);
+
+        let tag = toggle.querySelector(".nav-number");
+        if (!tag) {
+          tag = document.createElement("span");
+          tag.className = "nav-number nav-number-group";
+          toggle.prepend(tag);
+        }
+        tag.textContent = lo === hi ? `${lo}. ` : `${lo}–${hi}. `;
+      });
+  }
+
+  function setStepIndicator() {
+    // navbar is pinned (_quarto.yml: navbar.pinned), so the current step
+    // sits on the left, beside the brand; menu items move to the right
+    const slot = document.querySelector(".quarto-navbar-tools");
+    const step = document.querySelector("h1.title")?.textContent.trim();
+    if (!slot || !step) return;
+
+    // scoped styles, injected once
+    if (!document.getElementById("step-indicator-style")) {
+      const style = document.createElement("style");
+      style.id = "step-indicator-style";
+      style.textContent = `
+        /* desktop: brand + step on the left, menu on the right */
+        @media (min-width: 992px) {
+          #quarto-header .navbar-brand-container { order: 0; margin: 0 !important; }
+          #quarto-header .quarto-navbar-tools {
+            order: 1;
+            display: flex;
+            align-items: center;
+          }
+          #quarto-header #navbarCollapse { order: 2; }
+          #quarto-header #navbarCollapse .navbar-nav {
+            margin-left: auto !important;
+            margin-right: 0 !important;
+          }
+        }
+        /* running-head style: italic, muted, set off by a middot */
+        .quarto-navbar-tools .step-name {
+          display: inline-block;
+          min-width: 0;
+          max-width: min(52ch, 38vw);
+          margin-inline-start: .65rem;
+          font-family: inherit;
+          font-size: .95rem;
+          font-style: italic;
+          font-weight: 400;
+          line-height: 1.25;
+          color: rgba(0, 0, 0, .55);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          vertical-align: middle;
+          user-select: none;
+        }
+        .quarto-navbar-tools .step-name::before {
+          content: "\\00B7";
+          margin-inline-end: .65rem;
+          font-style: normal;
+          color: rgba(0, 0, 0, .35);
+        }
+        @media (max-width: 991.98px) {
+          .quarto-navbar-tools .step-name { display: none; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    slot.innerHTML = `<span class="step-name"></span>`;
+    slot.querySelector(".step-name").textContent = step;
+  }
+
+  function fixAllPanelsCellFlexBasis() {
+    const panels = document.querySelectorAll(".quarto-layout-panel");
+    panels.forEach((panel) => {
+      const cells = panel.querySelectorAll(".quarto-layout-cell");
+      if (cells.length > 0) {
+        const referenceCell = cells[0];
+        const referenceFlexBasis =
+          window.getComputedStyle(referenceCell).flexBasis;
+        const lastCell = cells[cells.length - 1];
+        lastCell.style.flexBasis = referenceFlexBasis;
+      }
+    });
+  }
+
+  function moveLastFigCaption() {
+    const panels = document.querySelectorAll(".quarto-layout-panel");
+    panels.forEach((panel) => {
+      const rows = panel.querySelectorAll(".quarto-layout-row");
+      if (rows.length === 0) {
+        return;
+      }
+      const lastRow = rows[rows.length - 1];
+      const figCaptions = panel.querySelectorAll("figcaption");
+      if (figCaptions.length === 0) {
+        return;
+      }
+      const lastFigCaption = figCaptions[figCaptions.length - 1];
+      lastRow.insertAdjacentElement("afterend", lastFigCaption);
+    });
+  }
+
+  function styleAllCaptions() {
+    const captions = document.querySelectorAll("caption");
+    captions.forEach((caption) => {
+      caption.style.fontSize = "1.1em";
+      caption.style.fontStyle = "italic";
+    });
+  }
+
+  function adjustFooter() {
+    document.querySelectorAll("tfoot").forEach(updateFooter);
+  }
+
+  function styleTables(selector, maxWidth) {
+    document.querySelectorAll(selector).forEach((element) => {
+      element.style.maxWidth = maxWidth;
+      element.style.margin = "0 auto";
+    });
+  }
+
+  function replaceNAWithEmDash() {
+    document.querySelectorAll("td").forEach((td) => {
+      if (td.textContent.trim() === "NA") {
+        td.textContent = "—";
+      }
+    });
+  }
+
+  function formatAllCodeBlocks() {
+    const keywords = [
+      { text: "{", newClass: "curlybracket" },
+      { text: "}", newClass: "curlybracket" },
+      { text: "[[", newClass: "squarebracket" },
+      { text: "[", newClass: "squarebracket" },
+      { text: "]", newClass: "squarebracket" },
+      { text: "%>%", newClass: "pipe" },
+      { text: "%<>%", newClass: "pipe" },
+      { text: "%$%", newClass: "pipe" },
+      { text: "%T>%", newClass: "pipe" },
+      { text: "%s+%", newClass: "pipe" },
+      { text: "%||%", newClass: "pipe" },
+      { text: "%in%", newClass: "pipe" },
+      { text: "%dopar%", newClass: "pipe" },
+      { text: "`%>%`", newClass: "tickmark" },
+      { text: "`%<>%`", newClass: "tickmark" },
+      { text: "`%$%`", newClass: "tickmark" },
+      { text: "`%T>%`", newClass: "tickmark" },
+      { text: "`%s+%`", newClass: "tickmark" },
+      { text: "`%||%`", newClass: "tickmark" },
+      { text: "`%dopar%`", newClass: "tickmark" },
+      { text: "$", newClass: "dollarsign" },
+      { text: "function", newClass: "function" },
+      { text: "source", newClass: "source" },
+      { text: ",", newClass: "comma" },
+      { text: "::", newClass: "doublecolon" },
+      { text: "else", newClass: "else" },
+      { text: "if", newClass: "if" },
+      { text: "~", newClass: "tilde" },
+      { text: "=", newClass: "equals" },
+      { text: ":=", newClass: "equals" },
+      { text: "==", newClass: "equals" },
+      { text: "&&", newClass: "logicaland" },
+      { text: "&", newClass: "ampersand" },
+      { text: "-", newClass: "minus" },
+      { text: "+", newClass: "plus" },
+      { text: "/", newClass: "slash" },
+      { text: "\\", newClass: "slash" },
+      { text: "\\\\", newClass: "slash" },
+      { text: "`", newClass: "tickmark" },
+      { text: "*", newClass: "asterisk" },
+    ];
+
+    document.querySelectorAll("pre").forEach((pre) => {
+      pre.style.setProperty("line-height", "normal", "important");
+      const codeElement = pre.querySelector("code");
+      if (codeElement) {
+        codeElement.querySelectorAll("span").forEach((line) => {
+          // skip comments and strings - preserve their original styling
+          if (line.classList.contains("co") || line.classList.contains("st")) {
+            return;
+          }
+          const trimmedText = line.textContent.trim();
+          const keyword = keywords.find(
+            (k) =>
+              k.text === trimmedText ||
+              (trimmedText.startsWith(k.text) && trimmedText.endsWith(k.text)),
+          );
+          if (keyword) {
+            line.classList.add(keyword.newClass);
+          }
+        });
+      }
+    });
+
+    document.querySelectorAll("pre > code").forEach((codeBlock) => {
+      const patterns = [
+        {
+          regex:
+            /([a-zA-Z0-9]+)(<span class="[sc ]{0,3}doublecolon">::<\/span>)/g,
+          replacement: '<span class="package">$1</span>$2',
+        },
+        {
+          regex: /(<\/span>)(\s?)(\[)(\s?)/g,
+          replacement: '$1<span class="squarebracket">$2$3</span>$4',
+        },
+        {
+          regex: /([a-z]+)(\s?)(\[)(\s?)/g,
+          replacement: '$1<span class="squarebracket">$2$3</span>$4',
+        },
+        {
+          regex: /(<\/span>)(\s?)(\])(\s?)/g,
+          replacement: '$1<span class="squarebracket">$2$3</span>$4',
+        },
+        // handle closing curly brackets after '>' (with optional whitespace)
+        {
+          regex: /(>)(\s*)(\})(\s*)/g,
+          replacement: '$1<span class="curlybracket">$2$3</span>$4',
+        },
+        // handle opening curly brackets after '</span>' (with optional whitespace)
+        {
+          regex: /(<\/span>)(\s*)(\{)(\s*)/g,
+          replacement: '$1<span class="curlybracket">$2$3</span>$4',
+        },
+        // general patterns for square brackets
+        {
+          regex: /\[/g,
+          replacement: '<span class="squarebracket">[</span>',
+        },
+        {
+          regex: /\]/g,
+          replacement: '<span class="squarebracket">]</span>',
+        },
+        // add general patterns for all remaining curly brackets
+        {
+          regex: /\{/g,
+          replacement: '<span class="curlybracket">{</span>',
+        },
+        {
+          regex: /\}/g,
+          replacement: '<span class="curlybracket">}</span>',
+        },
+      ];
+
+      patterns.forEach(({ regex, replacement }) => {
+        codeBlock.innerHTML = codeBlock.innerHTML.replace(regex, replacement);
+      });
+    });
+
+    document.querySelectorAll("code.sourceCode.r").forEach((code) => {
+      processCodeBlock(code);
+    });
+
+    function processCodeBlock(node) {
+      Array.from(node.childNodes).forEach((child) => {
+        if (child.nodeType === Node.TEXT_NODE) {
+          const wrappedNodes = wrapBracketsInSpans(child.textContent);
+          if (wrappedNodes.length) {
+            wrappedNodes.forEach((newNode) =>
+              node.insertBefore(newNode, child),
+            );
+            node.removeChild(child);
+          }
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+          // skip processing brackets inside comments or strings
+          if (
+            child.classList.contains("co") ||
+            child.classList.contains("st")
+          ) {
+            return;
+          }
+          processCodeBlock(child);
+        }
+      });
+    }
+
+    function wrapBracketsInSpans(text) {
+      const fragment = document.createDocumentFragment();
+      let lastIndex = 0;
+
+      text.replace(/([()])/g, (match, bracket, index) => {
+        if (lastIndex < index) {
+          fragment.appendChild(
+            document.createTextNode(text.slice(lastIndex, index)),
+          );
+        }
+        const span = document.createElement("span");
+        span.className = bracket === "(" ? "bracketopen" : "bracketclose";
+        span.textContent = bracket;
+        fragment.appendChild(span);
+        lastIndex = index + 1;
+      });
+
+      if (lastIndex < text.length) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+      }
+
+      return Array.from(fragment.childNodes);
+    }
+
+    document.querySelectorAll("pre code").forEach((codeBlock) => {
+      const fragment = document.createDocumentFragment();
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = codeBlock.innerHTML;
+
+      function processNode(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const newContent = document.createDocumentFragment();
+          node.textContent.split(",").forEach((part, index, array) => {
+            newContent.appendChild(document.createTextNode(part));
+            if (index < array.length - 1) {
+              const commaSpan = document.createElement("span");
+              commaSpan.textContent = ",";
+              commaSpan.className = "comma";
+              newContent.appendChild(commaSpan);
+            }
+          });
+          return newContent;
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          const clone = node.cloneNode(false);
+          // skip processing inside strings and comments
+          if (node.className.includes("st") || node.className.includes("co")) {
+            clone.textContent = node.textContent;
+          } else {
+            for (let child of node.childNodes) {
+              clone.appendChild(processNode(child));
+            }
+          }
+          return clone;
+        }
+        return node.cloneNode(true);
+      }
+
+      for (let child of tempDiv.childNodes) {
+        fragment.appendChild(processNode(child));
+      }
+      codeBlock.innerHTML = "";
+      codeBlock.appendChild(fragment);
+    });
+  }
+
+  function attachCodeToggleHandlers() {
+    const hideBtn = document.getElementById("quarto-hide-all-code");
+    const showBtn = document.getElementById("quarto-show-all-code");
+
+    function toggleAllCode(show) {
+      document
+        .querySelectorAll("details.code-fold")
+        .forEach((d) => (d.open = show));
+    }
+
+    if (hideBtn) hideBtn.addEventListener("click", () => toggleAllCode(false));
+    if (showBtn) showBtn.addEventListener("click", () => toggleAllCode(true));
+  }
+
+  function wrapCodeFoldInCell() {
+    // convert any cell with column-page-right to column-body-outset-right
+    // (only for cells that directly contain code, not table outputs)
+    document.querySelectorAll(".cell.column-page-right").forEach((cell) => {
+      // only convert if this cell contains code (details.code-fold or .code-copy-outer-scaffold)
+      if (
+        cell.querySelector(
+          ":scope > details.code-fold, :scope > .code-copy-outer-scaffold",
+        )
+      ) {
+        cell.classList.remove("column-page-right");
+        cell.classList.add("column-body-outset-right");
+      }
+    });
+
+    // find all details.code-fold that need wrapping
+    document.querySelectorAll("details.code-fold").forEach((details) => {
+      const parent = details.parentElement;
+
+      // skip if already properly wrapped
+      if (parent.classList.contains("column-body-outset-right")) {
+        return;
+      }
+
+      // wrap it
+      const wrapper = document.createElement("div");
+      wrapper.className = "cell column-body-outset-right";
+      details.parentNode.insertBefore(wrapper, details);
+      wrapper.appendChild(details);
+    });
+
+    // same for .code-copy-outer-scaffold without details wrapper
+    document
+      .querySelectorAll(".code-copy-outer-scaffold")
+      .forEach((scaffold) => {
+        // skip if inside details (already handled above)
+        if (scaffold.closest("details.code-fold")) return;
+
+        const parent = scaffold.parentElement;
+
+        // skip if already properly wrapped
+        if (parent.classList.contains("column-body-outset-right")) {
+          return;
+        }
+
+        // wrap it
+        const wrapper = document.createElement("div");
+        wrapper.className = "cell column-body-outset-right";
+        scaffold.parentNode.insertBefore(wrapper, scaffold);
+        wrapper.appendChild(scaffold);
+      });
+  }
+
+  function scrollActivityBackToTop(retriesLeft = 25) {
+    const btn =
+      document.getElementById("quarto-back-to-top") ||
+      document.querySelector(".back-to-top, [aria-label='Back to top']");
+    if (!btn) {
+      // element may not be injected yet; retry briefly, then give up
+      if (retriesLeft > 0) {
+        setTimeout(() => scrollActivityBackToTop(retriesLeft - 1), 200);
+      }
+      return;
+    }
+
+    // take visibility away from quarto's position-based display logic
+    const style = document.createElement("style");
+    style.textContent = `
+    #quarto-back-to-top {
+      display: block !important;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+      pointer-events: none;
+    }
+    #quarto-back-to-top.scroll-active {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+  `;
+    document.head.appendChild(style);
+
+    let hideTimer = null;
+    const hideDelay = 700; // ms of no scrolling before it fades out
+
+    window.addEventListener(
+      "scroll",
+      () => {
+        btn.classList.add("scroll-active");
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => {
+          btn.classList.remove("scroll-active");
+        }, hideDelay);
+      },
+      { passive: true },
+    );
+  }
+
+  function initializeFeatures() {
+    // run each step in isolation so a failure in one feature
+    // cannot abort the remaining initialization
+    const run = (label, fn) => {
+      try {
+        fn();
+      } catch (err) {
+        console.error(`utilities.html: ${label} failed`, err);
+      }
+    };
+
+    run("tableFooters", () => {
+      document.querySelectorAll("tfoot").forEach((tfoot) => {
+        updateFooter(tfoot);
+        new MutationObserver((mutations) => {
+          if (
+            mutations.some(
+              (m) => m.type === "attributes" && m.attributeName === "colspan",
+            )
+          ) {
+            updateFooter(tfoot);
+          }
+        }).observe(tfoot, {
+          attributes: true,
+          subtree: true,
+          attributeFilter: ["colspan"],
+        });
+      });
+
+      document.addEventListener("click", (event) => {
+        if (event.target.matches("[class*=paginate_button]")) {
+          adjustFooter();
+        }
+      });
+    });
+
+    run("styleTables", () => {
+      styleTables(".table-max-450 table", "450px");
+      styleTables(".table-max-550 table", "550px");
+    });
+    run("replaceNAWithEmDash", replaceNAWithEmDash);
+    run("injectFigcaptionStyleInline", injectFigcaptionStyleInline);
+    run("adjustLastCells", adjustLastCells);
+    run("styleAllCaptions", styleAllCaptions);
+    run("formatAllCodeBlocks", formatAllCodeBlocks);
+    run("fixAllPanelsCellFlexBasis", fixAllPanelsCellFlexBasis);
+    run("moveLastFigCaption", moveLastFigCaption);
+    run("setHeaderNumbering", setHeaderNumbering);
+    run("applyHeaderTheme", applyHeaderTheme);
+    run("numberNavbarItems", numberNavbarItems);
+    run("setStepIndicator", setStepIndicator);
+    run("openLinksInNewTab", openLinksInNewTab);
+    run("hideCodeBlocks", () => hideCodeBlocksStartingWith("Styling"));
+    run("setClassToString", setClassToString);
+    run("wrapOperatorsInSpans", wrapOperatorsInSpans);
+    run("attachCodeToggleHandlers", attachCodeToggleHandlers);
+    run("wrapCodeFoldInCell", wrapCodeFoldInCell);
+    run("scrollActivityBackToTop", scrollActivityBackToTop);
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    initializeFeatures();
+    document
+      .querySelectorAll('[href*="#cb"]')
+      .forEach((i) => (i.style.color = "#c5c8c6"));
+
+    // auto-toggle the first collapsible note callout once the tab has
+    // been visible for a second; skip entirely when none exists
+    const hasCollapsibleCallout = document.querySelector(
+      '[class*=callout-note] [data-bs-toggle="collapse"]',
+    );
+    if (!hasCollapsibleCallout) return;
+
+    let visibilityTimer = null;
+    let hasTriggered = false;
+
+    const triggerCollapse = () => {
+      if (hasTriggered) return;
+
+      const callout = document.querySelector("[class*=callout-note]");
+      const toggle = callout?.querySelector('[data-bs-toggle="collapse"]');
+
+      if (toggle) {
+        toggle.click();
+        hasTriggered = true;
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        visibilityTimer = setTimeout(triggerCollapse, 1000);
+      } else {
+        clearTimeout(visibilityTimer);
+      }
+    };
+
+    if (document.visibilityState === "visible") {
+      visibilityTimer = setTimeout(triggerCollapse, 1000);
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+  });
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+    const viewSource = window.document.getElementById('quarto-view-source') ||
+                       window.document.getElementById('quarto-code-tools-source');
+    if (viewSource) {
+      const sourceUrl = viewSource.getAttribute("data-quarto-source-url");
+      viewSource.addEventListener("click", function(e) {
+        if (sourceUrl) {
+          // rstudio viewer pane
+          if (/\bcapabilities=\b/.test(window.location)) {
+            window.open(sourceUrl);
+          } else {
+            window.location.href = sourceUrl;
+          }
+        } else {
+          const modal = new bootstrap.Modal(document.getElementById('quarto-embedded-source-code-modal'));
+          modal.show();
+        }
+        return false;
+      });
+    }
+    function toggleCodeHandler(show) {
+      return function(e) {
+        const detailsSrc = window.document.querySelectorAll(".cell > details > .sourceCode");
+        for (let i=0; i<detailsSrc.length; i++) {
+          const details = detailsSrc[i].parentElement;
+          if (show) {
+            details.open = true;
+          } else {
+            details.removeAttribute("open");
+          }
+        }
+        const cellCodeDivs = window.document.querySelectorAll(".cell > .sourceCode");
+        const fromCls = show ? "hidden" : "unhidden";
+        const toCls = show ? "unhidden" : "hidden";
+        for (let i=0; i<cellCodeDivs.length; i++) {
+          const codeDiv = cellCodeDivs[i];
+          if (codeDiv.classList.contains(fromCls)) {
+            codeDiv.classList.remove(fromCls);
+            codeDiv.classList.add(toCls);
+          } 
+        }
+        return false;
+      }
+    }
+    const hideAllCode = window.document.getElementById("quarto-hide-all-code");
+    if (hideAllCode) {
+      hideAllCode.addEventListener("click", toggleCodeHandler(false));
+    }
+    const showAllCode = window.document.getElementById("quarto-show-all-code");
+    if (showAllCode) {
+      showAllCode.addEventListener("click", toggleCodeHandler(true));
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+      &nbsp;
+    </div>   
+    <div class="nav-footer-center">
+<p>R version 4.6.0 (2026-04-24)<br> Platform: aarch64-apple-darwin23<br> Running under: macOS Tahoe 26.2<br> Quarto 1.9.38<br></p>
+<div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/siardv/lifecourse-sep-diet/blob/main/analysis/models/adjusted/index.qmd" class="toc-action"><i class="bi bi-github"></i>View source</a></li><li><a href="https://github.com/siardv/lifecourse-sep-diet/issues/new" class="toc-action"><i class="bi empty"></i>Report an issue</a></li></ul></div></div>
+    <div class="nav-footer-right">
+      &nbsp;
+    </div>
+  </div>
+</footer>
+
+
+
+
+<script src="../../../site_libs/quarto-html/zenscroll-min.js"></script>
+</body></html>
