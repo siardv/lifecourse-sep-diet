@@ -1,0 +1,642 @@
+---
+title: "Adjusted Regression Models: Robust Estimates"
+subtitle: "Modeling After Removing Influential Observations"
+author: "Siard van den Bosch"
+date: 2025-02-18
+date-modified: last-modified
+---
+
+```{=html}
+<script>
+  window.config = {offset: 9};
+</script>
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+|                |         |
+| -------------- | ------- |
+| **Purpose**    | Refit the Step 7 nested model set on the outlier-trimmed sensitivity dataset |
+| **Inputs**     | `adjusted_data.rds`, `models.rds` |
+| **Outputs**    | `adjusted_fit_{0..11}.rds`, `adjusted_fits.rds` |
+| **Method**     | MM-estimation; gender-stratified parallel bootstrap |
+| **Requires**   | [Step 7 (Unadjusted Models)](/analysis/models/unadjusted/index.qmd), [Step 8 (Influence Diagnostics)](/analysis/models/assumptions/index.qmd) |
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+```{r}
+#| label: load-project-resources
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body
+
+# clear global environment, garbage collect, and detach packages
+rm(list = ls(envir = .GlobalEnv), envir = .GlobalEnv)
+invisible(gc(full = TRUE))
+invisible(lapply(grep(":|autoloads|globalenv", search(),
+  invert = TRUE, value = TRUE, ignore.case = TRUE
+), detach, character.only = TRUE, unload = TRUE, force = TRUE))
+
+# source custom functions (consistent with steps 7-8)
+purrr::walk(file.path(here::here("assets", "functions"), paste0(c(
+  "numeric_df", "fit_robust_model", "standardize", "named_list",
+  "set_globals", "import_pipes", "fit_models", "prepare_model_matrices",
+  "sci_to_tex", "create_lmrob_control", "process_model", "save_function"
+), ".R")), source)
+
+# set global options and import pipe operators
+set_globals()
+import_pipes()
+
+# global recompute switch
+# TRUE re-runs the heavy steps; FALSE loads cached assets when they exist
+recompute_heavy <- FALSE
+
+# define analysis type
+type <- "adjusted"
+options(width = 250)
+```
+
+```{r}
+#| label: library-imports
+#| message: false
+#| code-fold: true
+#| column: body
+
+library(compiler)
+library(parallel)
+library(robustbase)
+library(glue)
+```
+
+## Analysis Parameters
+
+```{r}
+#| label: analysis-parameters
+#| code-fold: show
+#| column: body
+
+# bootstrap configuration
+bootstrap_params <- list(
+  n_boots   = 5000L,
+  pct       = 0.95,
+  alpha     = 0.05,
+  delta     = 0.01,
+  seed      = 625L,
+  max_cores = 8L
+)
+
+# robust regression configuration
+robust_params <- list(
+  psi            = "bisquare",
+  std_data       = TRUE,
+  coef_threshold = 1e4
+)
+```
+
+## Bootstrap Functions
+
+```{r}
+#| label: fn-min-bootstrap-iterations
+#| code-fold: true
+#| column: body
+
+min_bootstrap_iterations <- function(data, statistic = mean, alpha = 0.05, delta = 0.01) {
+  if (!inherits(data, c("data.frame", "matrix", "numeric", "integer"))) {
+    stop("'data' must be data.frame, matrix, or numeric vector.")
+  }
+  statistic <- match.fun(statistic)
+  bootstrap_data <- if (inherits(data, c("data.frame", "matrix"))) data[, 1] else data
+
+  n <- length(bootstrap_data)
+  prelim_boots <- 100L
+  prelim_stats <- replicate(
+    prelim_boots,
+    statistic(sample(bootstrap_data, n, replace = TRUE))
+  )
+
+  var_boot <- stats::var(prelim_stats)
+  za2 <- stats::qnorm(1 - alpha / 2)^2
+  n_boot <- ceiling(za2 * var_boot / (delta^2))
+
+  max(n_boot, 100L)
+}
+```
+
+```{r}
+#| label: fn-bootstrap-pvalues
+#| code-fold: true
+#| column: body
+
+bootstrap_pvalues <- function(bootstrap_estimates, observed_coef) {
+  if (is.null(bootstrap_estimates) || ncol(bootstrap_estimates) == 0) {
+    return(rep(NA_real_, length(observed_coef)))
+  }
+  purrr::map_dbl(seq_along(observed_coef), function(j) {
+    valid <- bootstrap_estimates[!is.na(bootstrap_estimates[, j]), j]
+    n_valid <- length(valid)
+    p_low <- (sum(valid <= 0) + 1) / (n_valid + 1)
+    p_high <- (sum(valid >= 0) + 1) / (n_valid + 1)
+    min(1, 2 * min(p_low, p_high))
+  })
+}
+```
+
+```{r}
+#| label: fn-bootstrap-linear-model
+#| code-fold: true
+#| column: body
+
+bootstrap_linear_model <- function(indices, dm, resp, ctrl = NULL, type = "robust",
+                                   coef_threshold = 1e4) {
+  tryCatch(
+    {
+      if (type == "robust") {
+        fit <- robustbase::lmrob.fit(
+          x = dm[indices, , drop = FALSE],
+          y = resp[indices],
+          control = ctrl
+        )
+        if (is.null(fit$coefficients) || any(abs(fit$coefficients) > coef_threshold)) {
+          alt_ctrl <- robustbase::lmrob.control(method = "S", efficiency = 0.85, max.it = 100)
+          fit <- robustbase::lmrob.fit(dm[indices, , drop = FALSE], resp[indices], alt_ctrl)
+        }
+      } else {
+        fit <- stats::lm.fit(dm[indices, , drop = FALSE], resp[indices])
+      }
+
+      if (is.null(fit$coefficients)) {
+        return(rep(NA_real_, ncol(dm)))
+      }
+      if (any(abs(fit$coefficients) > coef_threshold)) {
+        return(rep(NA_real_, ncol(dm)))
+      }
+      fit$coefficients
+    },
+    error = function(e) rep(NA_real_, ncol(dm))
+  )
+}
+```
+
+```{r}
+#| label: fn-evaluate-boot-stats
+#| code-fold: true
+#| column: body
+
+evaluate_boot_stats <- function(boot_matrix, min_boots, pct = 0.95) {
+  if (!is.matrix(boot_matrix)) stop("boot_matrix must be a matrix")
+  if (pct <= 0 || pct >= 1) stop("pct must be between 0 and 1")
+
+  num_samples <- nrow(boot_matrix)
+  valid_samples <- sum(stats::complete.cases(boot_matrix))
+
+  if (num_samples < min_boots) {
+    warning(glue::glue("Only {num_samples} bootstrap samples, below minimum required ({min_boots})."))
+  }
+  if (valid_samples < min_boots) {
+    warning(glue::glue("Only {valid_samples} valid samples, below minimum required ({min_boots})."))
+  }
+
+  probs <- c((1 - pct) / 2, 1 - (1 - pct) / 2)
+  conf_int <- t(apply(boot_matrix, 2, stats::quantile, probs = probs, na.rm = TRUE))
+
+  list(
+    conf_int = conf_int,
+    bootstrap_estimates = boot_matrix,
+    valid_samples = valid_samples
+  )
+}
+```
+
+```{r}
+#| label: fn-weighted-bootstrap
+#| code-fold: true
+#| column: body
+
+weighted_bootstrap <- function(sample_size, response, strata,
+                               outlier_percentile = 0.9, min_stratum_size = 5) {
+  # plain stratified resampling: draw within strata proportional to stratum size
+  # response, outlier_percentile, and min_stratum_size are retained for
+  # signature compatibility and intentionally unused; conditioning the resample
+  # on the response distribution understates bootstrap variability
+  if (!is.factor(strata)) strata <- as.factor(strata)
+
+  strata_levels <- levels(strata)
+  strata_counts <- table(strata)
+  strata_prop <- strata_counts / length(strata)
+
+  strata_sizes <- floor(strata_prop * sample_size)
+  shortfall <- sample_size - sum(strata_sizes)
+  if (shortfall > 0) {
+    additional <- sample(strata_levels, shortfall, prob = strata_prop)
+    for (lev in additional) strata_sizes[lev] <- strata_sizes[lev] + 1
+  }
+
+  samples <- purrr::map(strata_levels, function(level) {
+    idx <- which(strata == level)
+    n_level <- strata_sizes[level]
+    if (n_level == 0 || length(idx) == 0) {
+      return(integer(0))
+    }
+    sample(idx, size = n_level, replace = TRUE)
+  })
+
+  do.call(c, samples)
+}
+```
+
+```{r}
+#| label: fn-parallel-bootstrap
+#| code-fold: true
+#| column: body
+
+parallel_bootstrap <- function(data, n_boots, robust_fit, ols_fit, resp, dm, ctrl,
+                               min_boots, pct = 0.95, max_cores = 8L, seed = 625L) {
+  if (!("woman" %in% names(data))) stop("Stratification variable 'woman' not found")
+  stopifnot(length(resp) == nrow(data), nrow(dm) == nrow(data))
+
+  strata <- as.factor(data$woman)
+  n_cores <- min(parallel::detectCores(), max_cores)
+  cl <- parallel::makeCluster(n_cores)
+  on.exit(parallel::stopCluster(cl), add = TRUE)
+  parallel::clusterSetRNGStream(cl, iseed = seed)
+
+  parallel::clusterExport(
+    cl,
+    varlist = c(
+      "data", "resp", "dm", "robust_fit", "ols_fit", "ctrl",
+      "bootstrap_linear_model", "strata", "weighted_bootstrap"
+    ),
+    envir = environment()
+  )
+  parallel::clusterEvalQ(cl, library(robustbase))
+
+  chunk_size <- min(500L, n_boots)
+  n_chunks <- ceiling(n_boots / chunk_size)
+
+  robust_results <- vector("list", n_boots)
+  ols_results <- vector("list", n_boots)
+  result_idx <- 0L
+
+  for (chunk in seq_len(n_chunks)) {
+    chunk_start <- (chunk - 1L) * chunk_size + 1L
+    chunk_end <- min(chunk * chunk_size, n_boots)
+    chunk_size_actual <- chunk_end - chunk_start + 1L
+
+    message(glue::glue("Processing bootstrap chunk {chunk}/{n_chunks}..."))
+
+    boot_indices_chunk <- parallel::parLapply(
+      cl, seq_len(chunk_size_actual),
+      function(...) weighted_bootstrap(nrow(data), resp, strata)
+    )
+
+    if (!is.null(robust_fit)) {
+      robust_chunk <- parallel::parLapply(cl, boot_indices_chunk, function(idxs) {
+        bootstrap_linear_model(idxs, dm, resp, ctrl = ctrl, type = "robust")
+      })
+      for (i in seq_along(robust_chunk)) {
+        robust_results[[result_idx + i]] <- robust_chunk[[i]]
+      }
+    }
+
+    ols_chunk <- parallel::parLapply(cl, boot_indices_chunk, function(idxs) {
+      bootstrap_linear_model(idxs, dm, resp, ctrl = NULL, type = "ols")
+    })
+    for (i in seq_along(ols_chunk)) {
+      ols_results[[result_idx + i]] <- ols_chunk[[i]]
+    }
+
+    result_idx <- result_idx + chunk_size_actual
+  }
+
+  robust_out <- if (!is.null(robust_fit)) {
+    robust_matrix <- do.call(rbind, robust_results[seq_len(n_boots)])
+    evaluate_boot_stats(robust_matrix, min_boots, pct)
+  } else {
+    list(conf_int = NULL, bootstrap_estimates = NULL, valid_samples = 0L)
+  }
+
+  ols_matrix <- do.call(rbind, ols_results[seq_len(n_boots)])
+  ols_out <- evaluate_boot_stats(ols_matrix, min_boots, pct)
+
+  list(
+    robust_out = robust_out,
+    ols_out = ols_out,
+    n_boots = n_boots,
+    completed_boots = list(
+      robust = if (is.null(robust_fit)) 0L else nrow(do.call(rbind, robust_results[seq_len(n_boots)])),
+      ols = nrow(ols_matrix)
+    )
+  )
+}
+```
+
+```{r}
+#| label: fn-process-model-bootstrap
+#| code-fold: true
+#| column: body
+
+# bootstrap-enabled process_model (overrides sourced version)
+process_model_bootstrap <- function(fit, type, n_boots, min_boots, data, resp, dm, ctrl, pct, seed = 625L) {
+  if (is.null(fit)) {
+    return(NULL)
+  }
+
+  model_output <- list(
+    coefficients = coef(fit),
+    standard_errors = sqrt(diag(stats::vcov(fit))),
+    confidence_intervals = NULL,
+    p_values = NULL,
+    bootstrap_estimates = NULL,
+    bootstrap_quality_score = 0,
+    valid_bootstrap_count = 0L,
+    bootstrap_convergence_rate = 0,
+    diagnostics = list()
+  )
+
+  if (n_boots > 0) {
+    message(glue::glue("Running {n_boots} bootstrap iterations for {type} model..."))
+
+    robust_fit_for_boot <- if (type == "robust") fit else NULL
+    ols_fit_for_boot <- if (type == "ols") fit else NULL
+
+    boot_results <- tryCatch(
+      {
+        parallel_bootstrap(
+          data = data, n_boots = n_boots,
+          robust_fit = robust_fit_for_boot, ols_fit = ols_fit_for_boot,
+          resp = resp, dm = dm, ctrl = ctrl, min_boots = min_boots, pct = pct, seed = seed
+        )
+      },
+      error = function(e) {
+        warning(glue::glue("Bootstrap failed: {e$message}"))
+        NULL
+      }
+    )
+
+    if (!is.null(boot_results)) {
+      boot_out <- if (type == "robust") boot_results$robust_out else boot_results$ols_out
+
+      if (!is.null(boot_out) && !is.null(boot_out$bootstrap_estimates)) {
+        model_output$bootstrap_estimates <- boot_out$bootstrap_estimates
+        model_output$confidence_intervals <- boot_out$conf_int
+        model_output$valid_bootstrap_count <- boot_out$valid_samples
+        model_output$bootstrap_convergence_rate <- boot_out$valid_samples / n_boots
+        model_output$p_values <- bootstrap_pvalues(
+          boot_out$bootstrap_estimates, model_output$coefficients
+        )
+        model_output$bootstrap_quality_score <- boot_out$valid_samples / n_boots
+      }
+    }
+  }
+
+  model_output
+}
+```
+
+```{r}
+#| label: fn-robust-analysis-bootstrap
+#| code-fold: show
+#| column: body
+
+# main analysis function with bootstrap support
+robust_analysis_bootstrap <- function(data, form, n_boots = NULL, pct = 0.95,
+                                      alpha = 0.05, delta = 0.01, ctrl = NULL,
+                                      seed = 625, psi = "bisquare", std_data = TRUE) {
+  set.seed(seed, kind = "default")
+
+  if (std_data) data <- standardize(data)
+
+  mm_list <- prepare_model_matrices(form, data)
+  dm <- mm_list$design_matrix
+  resp <- mm_list$response
+
+  min_boots <- if (!is.null(n_boots) && n_boots > 0) {
+    message(glue::glue("Bootstrap enabled with {n_boots} iterations."))
+    n_boots
+  } else {
+    n_boots <- 0
+    message("Bootstrapping disabled. Fitting robust and OLS models only.")
+    NA_integer_
+  }
+
+  ctrl <- create_lmrob_control(ctrl, psi)
+  fits <- fit_models(data, form, ctrl)
+
+  robust_results <- process_model_bootstrap(
+    fits$robust_fit, "robust", n_boots, min_boots, data, resp, dm, ctrl, pct,
+    seed = seed
+  )
+  ols_results <- process_model_bootstrap(
+    fits$ols_fit, "ols", n_boots, min_boots, data, resp, dm, ctrl, pct,
+    seed = seed
+  )
+
+  analysis_results <- list(
+    robust_model_results = list(
+      model_object = fits$robust_fit,
+      analysis_output = robust_results
+    ),
+    ols_model_results = list(
+      model_object = fits$ols_fit,
+      analysis_output = ols_results
+    ),
+    analysis_metadata = list(
+      total_observations = nrow(data),
+      number_of_predictors = ncol(dm),
+      bootstrap_iterations = n_boots,
+      minimum_required_bootstraps = min_boots,
+      analysis_timestamp = Sys.time(),
+      robustbase_version = utils::packageVersion("robustbase")
+    ),
+    detailed_outputs = list(robust = robust_results, ols = ols_results)
+  )
+
+  class(analysis_results) <- "structured_models"
+  analysis_results
+}
+```
+
+```{r}
+#| label: byte-compilation
+#| code-fold: true
+#| column: body
+
+# byte compile performance-critical functions
+min_bootstrap_iterations <- compiler::cmpfun(min_bootstrap_iterations)
+bootstrap_pvalues <- compiler::cmpfun(bootstrap_pvalues)
+bootstrap_linear_model <- compiler::cmpfun(bootstrap_linear_model)
+evaluate_boot_stats <- compiler::cmpfun(evaluate_boot_stats)
+weighted_bootstrap <- compiler::cmpfun(weighted_bootstrap)
+parallel_bootstrap <- compiler::cmpfun(parallel_bootstrap)
+process_model_bootstrap <- compiler::cmpfun(process_model_bootstrap)
+robust_analysis_bootstrap <- compiler::cmpfun(robust_analysis_bootstrap)
+```
+
+## Load Data and Model Specifications
+
+```{r}
+#| label: load-inputs
+#| code-fold: show
+#| column: body
+
+# paths to input files
+data_path <- here::here("assets", "data", "saved", "adjusted_data.rds")
+models_path <- here::here("assets", "models", "models.rds")
+models_dir <- here::here("assets", "models")
+
+# consolidated output path (gated by recompute_heavy below)
+consolidated_path <- file.path(models_dir, glue::glue("{type}_fits.rds"))
+
+# validate inputs exist
+if (!file.exists(data_path)) stop("Missing input from Step 8: ", data_path)
+if (!file.exists(models_path)) stop("Missing model specifications from Step 7: ", models_path)
+
+# load inputs
+adjusted_data <- readRDS(data_path)
+model_specs <- readRDS(models_path)
+
+# ensure models directory exists
+if (!dir.exists(models_dir)) dir.create(models_dir, recursive = TRUE)
+```
+
+```{r}
+#| label: verify-step8-data
+#| results: asis
+#| code-fold: true
+
+n_obs <- nrow(adjusted_data)
+n_vars <- ncol(adjusted_data)
+n_models <- length(model_specs)
+
+verify_msg <- glue::glue(
+  "<div class='callout-note'>
+<strong>Step 8 Data Verification</strong><br><br>
+<strong>Input:</strong> <code>adjusted_data.rds</code> ({n_obs} observations, {n_vars} variables)<br>
+<strong>Source:</strong> Sensitivity dataset from Step 8 (influential observations removed)<br>
+<strong>Models:</strong> {n_models} model specifications loaded from Step 7<br>
+<strong>Bootstrap iterations:</strong> {bootstrap_params$n_boots}
+</div>"
+)
+cat(verify_msg)
+```
+
+## Model-Hypothesis Mapping
+
+**Baseline and Composite SES Models (Models 0–6):**
+
+| Model | Description                 | Tests                     | Hypotheses  |
+| ----- | --------------------------- | ------------------------- | ----------- |
+| 0     | Null (intercept only)       | Baseline                  | –           |
+| 1     | Adult covariates + own SES  | Adjustment set            | –           |
+| 2     | + Parental SES (composite)  | Parental SES main effects | H1, RQ1     |
+| 3     | + Partner SES               | Partner SES main effects  | H2, RQ2     |
+| 4     | + Gender × SES interactions | Gender moderation         | H3, H4, RQ3 |
+| 5     | + Parental × Partner SES    | SES synergy               | H5, RQ4     |
+| 6     | + Gender × synergy          | Gender-moderated synergy  | H6, RQ4     |
+
+**Disaggregated SES Models (Models 7–11):**
+
+| Model | Description                          | Tests                         | Hypotheses  |
+| ----- | ------------------------------------ | ----------------------------- | ----------- |
+| 7     | Covariates + Mother SES + Father SES | Differential parental effects | H1, RQ1     |
+| 8     | + Partner SES (disaggregated)        | Partner SES main effects      | H2, RQ2     |
+| 9     | + Gender × Mother/Father/Partner SES | Gender moderation by parent   | H3, H4, RQ3 |
+| 10    | + Mother × Partner, Father × Partner | Parent-specific synergy       | H5, RQ4     |
+| 11    | + Gender × synergy terms             | Gender-moderated synergy      | H6, RQ4     |
+
+## Fit All Models
+
+```{r}
+#| label: fit-all-models
+#| message: false
+#| code-fold: show
+#| column: body
+
+# reuse cached fits when available, otherwise refit the full nested set
+if (!recompute_heavy && file.exists(consolidated_path)) {
+  message("cached fits found; skipping model fitting (set recompute_heavy <- TRUE to refit)")
+} else {
+  # fit all models using purrr::imap for named iteration
+  all_fits <- purrr::imap(model_specs, function(model_formula, model_name) {
+    message(glue::glue("\n{strrep('=', 60)}\nFitting {model_name}...\n"))
+
+    fit_result <- robust_analysis_bootstrap(
+      data      = adjusted_data,
+      form      = model_formula,
+      n_boots   = bootstrap_params$n_boots,
+      pct       = bootstrap_params$pct,
+      alpha     = bootstrap_params$alpha,
+      delta     = bootstrap_params$delta,
+      ctrl      = NULL,
+      seed      = bootstrap_params$seed,
+      psi       = robust_params$psi,
+      std_data  = robust_params$std_data
+    )
+
+    # save individual fit
+    fit_filename <- glue::glue("{type}_fit_{gsub('model_', '', model_name)}.rds")
+    saveRDS(fit_result, file.path(models_dir, fit_filename))
+
+    fit_result
+  })
+
+  # assign to individual objects for compatibility with downstream steps
+  # vectorised, no loop: rename model_* -> fit_* and bind into the chunk environment
+  list2env(setNames(all_fits, sub("^model", "fit", names(all_fits))), environment())
+}
+```
+
+## Save Consolidated Model Fits
+
+```{r}
+#| label: save-all-fits
+#| message: false
+#| code-fold: show
+#| column: body
+
+# rebuild and persist the consolidated list only when (re)fitting
+if (recompute_heavy || !file.exists(consolidated_path)) {
+  consolidated_fits <- named_list(
+    fit_0, fit_1, fit_2, fit_3, fit_4, fit_5, fit_6,
+    fit_7, fit_8, fit_9, fit_10, fit_11
+  )
+
+  saveRDS(consolidated_fits, consolidated_path)
+}
+```
+
+```{r}
+#| label: export-summary
+#| results: asis
+#| code-fold: true
+
+export_msg <- glue::glue(
+  "<div class='callout-note'>
+<strong>Exported Files</strong><br><br>
+<strong>Model specifications:</strong> Loaded from Step 7 ({length(model_specs)} models)<br>
+<strong>Analysis dataset:</strong> <code>adjusted_data.rds</code> ({nrow(adjusted_data)} observations)<br>
+<strong>Individual fits:</strong> <code>adjusted_fit_0.rds</code> through <code>adjusted_fit_11.rds</code><br>
+<strong>Consolidated fits:</strong> <code>adjusted_fits.rds</code><br><br>
+<strong>Composite models (2–6):</strong> Use education_parental, isei08_parental, education_partner, isei08_partner<br>
+<strong>Disaggregated models (7–11):</strong> Use education/isei08 × mother/father/partner<br><br>
+All files saved to: <code>{models_dir}</code>
+</div>"
+)
+cat(export_msg)
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+## Output
+
+| File                                     | Content                                             |
+| ---------------------------------------- | --------------------------------------------------- |
+| `assets/models/adjusted_fit_{0..11}.rds` | Per-model robust fits with bootstrap output         |
+| `assets/models/adjusted_fits.rds`        | Named list consolidating all 12 adjusted model fits |
+
+**Next:** [Step 10 (Initial Model Evaluation)](/analysis/models/goodness-of-fit/model-fit/index.qmd)

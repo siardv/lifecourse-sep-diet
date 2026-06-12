@@ -1,0 +1,127 @@
+body {
+  font-family: "Garamond", serif;
+  line-height: 1.5;
+}
+
+.cell-output-stdout {
+  background-color: #e4ebf1;
+  padding-top: 2px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+h1,
+h2,
+h3 {
+  color: #003366;
+  font-weight: 600;
+}
+
+table {
+  table-layout: auto !important;
+  width: 100%;
+}
+
+col {
+  width: auto !important;
+}
+
+.doublecolon {
+  color: #81a2be !important;
+}
+
+.package {
+  color: #dd925f !important;
+}
+
+.tilde {
+  color: #81a2be !important;
+}
+
+.tickmark {
+  color: #c5c8c6 !important;
+}
+
+.pipe {
+  color: #81a2be !important;
+}
+
+.dollarsign {
+  color: #81a2be !important;
+}
+
+.comma {
+  color: #81a2be !important;
+}
+
+.squarebracket {
+  color: #cc6566 !important;
+}
+
+.curlybracket {
+  color: #cc6566 !important;
+}
+
+span.st .bracketopen,
+span.st .bracketclose {
+  color: #b5bd68 !important;
+}
+
+.bracketopen:not(span.st .bracketopen),
+.bracketclose:not(span.st .bracketclose) {
+  color: #cc6566 !important;
+}
+
+span.st .curlybracket {
+  color: #b5bd68 !important;
+}
+
+.curlybracket:not(span.st .curlybracket) {
+  color: #cc6566 !important;
+}
+
+pre.sourceCode {
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.equals,
+.logicaland,
+.ampersand {
+  color: #81a2be !important;
+}
+
+p code:not(.sourceCode),
+li code:not(.sourceCode),
+td code:not(.sourceCode) {
+  background-color: #f2f2f2 !important;
+  border-radius: 2px;
+}
+
+/* footer styling */
+.nav-footer {
+  position: relative;
+  padding-top: 0.75rem;
+  margin-top: 3rem;
+  font-size: 0.85em;
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.nav-footer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0),
+    rgba(0, 0, 0, 0.15),
+    rgba(0, 0, 0, 0)
+  );
+  transform: scaleY(0.5);
+  transform-origin: top;
+}
+
+.callout .callout-icon-container { display: none; }

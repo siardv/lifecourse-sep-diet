@@ -1,0 +1,609 @@
+---
+title: "Post-Imputation Data Finalization"
+subtitle: "Consolidating Variable Structure and Preparing Analysis-Ready Dataset"
+author: "Siard van den Bosch"
+date: 2025-01-20
+date-modified: last-modified
+---
+
+```{=html}
+<script>
+  window.config = {offset: 6};
+</script>
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+|                |         |
+| -------------- | ------- |
+| **Purpose**    | Finalize imputed dataset for downstream regression modeling. |
+| **Inputs**     | `imputed_data_combined.sav` |
+| **Outputs**    | `analysis_ready.sav` |
+| **Method**     | Variable verification; composite integrity checks; descriptive summarization |
+| **Requires**   | [Step 5 (Missing Data Imputation)](/analysis/data/imputation/index.qmd) |
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+```{r}
+#| label: load-project-resources
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# clear global env and force full garbage collection
+rm(list = ls(envir = .GlobalEnv), envir = .GlobalEnv)
+invisible(gc(full = TRUE))
+
+# detach non-base packages to avoid namespace interference
+invisible(lapply(grep(":|autoloads|globalenv", search(),
+  invert = TRUE, value = TRUE, ignore.case = TRUE
+), detach, character.only = TRUE, unload = TRUE, force = TRUE))
+
+# source custom functions for data handling and analysis
+purrr::walk(file.path(here::here("assets", "functions"), paste0(c(
+  "summarize_na", "set_globals", "describe", "import_pipes",
+  "add_style", "beautify_names", "as_kable", "format_p_value",
+  "footnote", "md_to_html", "numeric_df"
+), ".R")), source)
+
+# set global options and import pipe operators
+set_globals()
+import_pipes()
+
+# load imputed dataset from step 5
+imputed_data <- haven::read_sav(
+  here::here("assets", "data", "saved", "imputed_data_combined.sav")
+)
+```
+
+## Verify Dataset from Step 5
+
+```{r}
+#| label: define-expected-variables
+#| code-fold: true
+#| column: body-outset-right
+
+# define expected variable structure
+expected_vars <- list(
+  # respondent's own SES
+  respondent = c("education_self", "isei08_self"),
+
+  # parental SES (individual indicators)
+  parental_individual = c(
+    "education_father", "education_mother",
+    "isei08_father", "isei08_mother"
+  ),
+
+  # parental SES (composites)
+  parental_composites = c("education_parental", "isei08_parental"),
+
+  # partner SES
+  partner = c("education_partner", "isei08_partner"),
+
+  # core analysis variables
+  core = c("idnummer", "partner", "dhd_index", "dhd_kcal")
+)
+
+# flatten for checking
+all_expected <- unlist(expected_vars, use.names = FALSE)
+```
+
+- **in**: `imputed_data` (from Step 5)
+- **out**: `imputed_data` (canonical naming, composites verified)
+- **rule**: composites = row-mean of parental components, NA only when both parents missing
+
+```{r}
+#| label: verify-step5-data
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+# rename legacy occupation_* variables to isei08_* if present
+# (temporary fix until upstream Step 5 is re-run with corrected code)
+legacy_renames <- c(
+  "occupation_self" = "isei08_self",
+  "occupation_father" = "isei08_father",
+  "occupation_mother" = "isei08_mother",
+  "occupation_partner" = "isei08_partner"
+)
+
+legacy_found <- names(legacy_renames)[names(legacy_renames) %in% names(imputed_data)]
+if (length(legacy_found) > 0) {
+  for (old_name in legacy_found) {
+    new_name <- legacy_renames[[old_name]]
+    if (!new_name %in% names(imputed_data)) {
+      names(imputed_data)[names(imputed_data) == old_name] <- new_name
+    }
+  }
+}
+
+# identify present and missing expected variables
+vars_present <- all_expected[all_expected %in% names(imputed_data)]
+vars_missing <- setdiff(all_expected, vars_present)
+
+# count observations by partner status
+n_obs <- nrow(imputed_data)
+n_partnered <- sum(imputed_data$partner == 1, na.rm = TRUE)
+n_non_partnered <- sum(imputed_data$partner == 0, na.rm = TRUE)
+
+# check for any remaining legacy variable names
+legacy_names <- c(
+  "parental_edu", "parental_occ", "partner_edu", "partner_occ",
+  "occupation_self", "occupation_father", "occupation_mother", "occupation_partner"
+)
+legacy_present <- legacy_names[legacy_names %in% names(imputed_data)]
+
+# create or recreate parental composites to ensure consistent computation
+# use na.rm = FALSE for complete-case means, consistent with step 3
+composites_created <- character(0)
+composites_updated <- character(0)
+
+# education_parental: mean of father and mother education
+if (all(c("education_father", "education_mother") %in% names(imputed_data))) {
+  edu_new <- rowMeans(
+    imputed_data[, c("education_father", "education_mother")],
+    na.rm = FALSE
+  )
+  # set to NA where both components are missing
+  both_missing <- is.na(imputed_data$education_father) &
+    is.na(imputed_data$education_mother)
+  edu_new[both_missing] <- NA
+
+  if (!"education_parental" %in% names(imputed_data)) {
+    imputed_data$education_parental <- edu_new
+    composites_created <- c(composites_created, "education_parental")
+  } else if (!isTRUE(all.equal(imputed_data$education_parental, edu_new,
+    tolerance = 1e-10, check.attributes = FALSE
+  ))) {
+    imputed_data$education_parental <- edu_new
+    composites_updated <- c(composites_updated, "education_parental")
+  }
+}
+
+# isei08_parental: mean of father and mother occupation
+if (all(c("isei08_father", "isei08_mother") %in% names(imputed_data))) {
+  occ_new <- rowMeans(
+    imputed_data[, c("isei08_father", "isei08_mother")],
+    na.rm = FALSE
+  )
+  # set to NA where both components are missing
+  both_missing <- is.na(imputed_data$isei08_father) &
+    is.na(imputed_data$isei08_mother)
+  occ_new[both_missing] <- NA
+
+  if (!"isei08_parental" %in% names(imputed_data)) {
+    imputed_data$isei08_parental <- occ_new
+    composites_created <- c(composites_created, "isei08_parental")
+  } else if (!isTRUE(all.equal(imputed_data$isei08_parental, occ_new,
+    tolerance = 1e-10, check.attributes = FALSE
+  ))) {
+    imputed_data$isei08_parental <- occ_new
+    composites_updated <- c(composites_updated, "isei08_parental")
+  }
+}
+
+# re-check after creating/updating composites
+vars_present <- all_expected[all_expected %in% names(imputed_data)]
+vars_missing <- setdiff(all_expected, vars_present)
+
+# generate verification report
+verification_status <- if (length(vars_missing) == 0 && length(legacy_present) == 0) {
+  "<span style='color: green;'>&#x2714; All expected variables present</span>"
+} else if (length(legacy_present) > 0) {
+  glue(
+    "<span style='color: red;'>&#x2718; Legacy variable names detected: ",
+    "<code>{paste(legacy_present, collapse = '</code>, <code>')}</code></span>"
+  )
+} else {
+  glue(
+    "<span style='color: orange;'>&#x26A0; Missing expected variables: ",
+    "<code>{paste(vars_missing, collapse = '</code>, <code>')}</code></span>"
+  )
+}
+
+# note about renamed and created variables
+fixes_applied <- character(0)
+if (length(legacy_found) > 0) {
+  fixes_applied <- c(
+    fixes_applied,
+    glue(
+      "Renamed: <code>{paste(legacy_found, collapse = '</code>, <code>')}</code>",
+      " &rarr; <code>isei08_*</code>"
+    )
+  )
+}
+if (length(composites_created) > 0) {
+  fixes_applied <- c(
+    fixes_applied,
+    glue(
+      "Created: <code>{paste(composites_created, collapse = '</code>, <code>')}</code>"
+    )
+  )
+}
+if (length(composites_updated) > 0) {
+  fixes_applied <- c(
+    fixes_applied,
+    glue(
+      "Recomputed: <code>{paste(composites_updated, collapse = '</code>, <code>')}</code>"
+    )
+  )
+}
+fixes_note <- if (length(fixes_applied) > 0) {
+  glue("<br><strong>Fixes applied:</strong> {paste(fixes_applied, collapse = '; ')}")
+} else {
+  ""
+}
+
+htmltools::HTML(glue(
+  "<div class='callout-note'>
+  <strong>Step 5 Data Verification</strong><br><br>
+  <strong>Observations:</strong> {n_obs}<br>
+  <strong>Partnered respondents:</strong> {n_partnered}<br>
+  <strong>Non-partnered respondents:</strong> {n_non_partnered}<br><br>
+  <strong>Variable status:</strong> {verification_status}<br>
+  <strong>Expected variables present:</strong> {length(vars_present)} / {length(all_expected)}{fixes_note}
+  </div>"
+))
+```
+
+## Verify Parental Composite Integrity
+
+```{r}
+#| label: verify-composites
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+# helper function to compute parental mean with consistent na.rm = FALSE logic
+compute_parental_mean <- function(data, var1, var2) {
+  result <- rowMeans(data[, c(var1, var2)], na.rm = FALSE)
+  both_missing <- is.na(data[[var1]]) & is.na(data[[var2]])
+  result[both_missing] <- NA
+  result
+}
+
+# verify education_parental computation
+edu_components_present <- all(
+  c("education_father", "education_mother") %in% names(imputed_data)
+)
+
+if ("education_parental" %in% names(imputed_data) && edu_components_present) {
+  edu_expected <- compute_parental_mean(
+    imputed_data, "education_father", "education_mother"
+  )
+  edu_match <- all.equal(
+    imputed_data$education_parental,
+    edu_expected,
+    tolerance = 1e-10,
+    check.attributes = FALSE
+  )
+  edu_status <- if (isTRUE(edu_match)) {
+    if ("education_parental" %in% composites_created) {
+      "<span style='color: blue;'>&#x2714; Created from components</span>"
+    } else if ("education_parental" %in% composites_updated) {
+      "<span style='color: blue;'>&#x2714; Recomputed from components</span>"
+    } else {
+      "<span style='color: green;'>&#x2714; Verified</span>"
+    }
+  } else {
+    "<span style='color: red;'>&#x2718; Mismatch detected</span>"
+  }
+} else if (!"education_parental" %in% names(imputed_data)) {
+  edu_status <- "<span style='color: red;'>&#x2718; Variable missing</span>"
+} else {
+  edu_status <- "<span style='color: orange;'>&#x26A0; Component variables missing</span>"
+}
+
+# verify isei08_parental computation
+occ_components_present <- all(
+  c("isei08_father", "isei08_mother") %in% names(imputed_data)
+)
+
+if ("isei08_parental" %in% names(imputed_data) && occ_components_present) {
+  occ_expected <- compute_parental_mean(
+    imputed_data, "isei08_father", "isei08_mother"
+  )
+  occ_match <- all.equal(
+    imputed_data$isei08_parental,
+    occ_expected,
+    tolerance = 1e-10,
+    check.attributes = FALSE
+  )
+  occ_status <- if (isTRUE(occ_match)) {
+    if ("isei08_parental" %in% composites_created) {
+      "<span style='color: blue;'>&#x2714; Created from components</span>"
+    } else if ("isei08_parental" %in% composites_updated) {
+      "<span style='color: blue;'>&#x2714; Recomputed from components</span>"
+    } else {
+      "<span style='color: green;'>&#x2714; Verified</span>"
+    }
+  } else {
+    "<span style='color: red;'>&#x2718; Mismatch detected</span>"
+  }
+} else if (!"isei08_parental" %in% names(imputed_data)) {
+  occ_status <- "<span style='color: red;'>&#x2718; Variable missing</span>"
+} else {
+  occ_status <- "<span style='color: orange;'>&#x26A0; Component variables missing</span>"
+}
+
+htmltools::HTML(glue(
+  "<div class='callout-note'>
+  <strong>Composite Integrity Verification</strong><br><br>
+  <code>education_parental</code> = mean(education_father, education_mother): {edu_status}<br>
+  <code>isei08_parental</code> = mean(isei08_father, isei08_mother): {occ_status}
+  </div>"
+))
+```
+
+## SES Variable Structure
+
+```{r}
+#| label: tbl-ses-structure
+#| tbl-cap: "SES Variable Structure"
+#| code-fold: show
+#| column: body-outset-right
+
+col_names <- c("Variable", "Present", "$n_{valid}$", "$\\%_{valid}$")
+footnote_text <- glue("$N = {n_obs}$")
+
+ses_structure <- data.frame(
+  Variable = c(
+    "education_self", "education_partner", "education_father",
+    "education_mother", "education_parental",
+    "isei08_self", "isei08_partner", "isei08_father",
+    "isei08_mother", "isei08_parental"
+  ),
+  stringsAsFactors = FALSE
+) %>%
+  dplyr::mutate(
+    Present = ifelse(Variable %in% names(imputed_data),
+      "$\\checkmark$", "$\\times$"
+    ),
+    n_valid = sapply(Variable, function(v) {
+      if (v %in% names(imputed_data)) {
+        sum(!is.na(imputed_data[[v]]))
+      } else {
+        NA_integer_
+      }
+    }),
+    pct_valid = sapply(Variable, function(v) {
+      if (v %in% names(imputed_data)) {
+        round(100 * mean(!is.na(imputed_data[[v]])), 1)
+      } else {
+        NA_real_
+      }
+    })
+  )
+
+ses_structure$Present %<>% md_to_html()
+
+ses_structure %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+## Summarize Missing Data Post-Imputation
+
+After imputation, only structural missingness should remain (partner variables for non-partnered respondents).
+
+```{r}
+#| label: missing-post-imputation-attrs
+#| code-fold: true
+#| column: body-outset-right
+
+col_names <- c("Variable", "$n_{miss}$", "$\\%_{miss}$", "Structural$^{1}$")
+
+footnote_text <- glue(
+  "$N = {n_obs}$; ",
+  "$^{{1}}$ Structural missingness = partner-specific variables for non-partnered respondents."
+)
+```
+
+```{r}
+#| label: tbl-missing-post-imputation
+#| tbl-cap: "Missing Values After Imputation"
+#| code-fold: show
+#| column: body-outset-right
+
+# summarize missingness for key analysis variables
+missing_summary <- imputed_data %>%
+  dplyr::select(dplyr::any_of(all_expected)) %>%
+  summarize_na() %>%
+  dplyr::mutate(
+    variable = beautify_names(variable),
+    structural = ifelse(
+      grepl("partner", variable, ignore.case = TRUE) & n_miss > 0,
+      "Yes", "No"
+    )
+  )
+
+missing_summary %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+## Descriptive Statistics
+
+```{r}
+#| label: descriptive-stats-col-names
+#| code-fold: true
+#| column: body-outset-right
+
+col_names <- c(
+  "$\\ $", "$n$", "$\\bar{x}$", "$\\text{Min.}$", "$\\text{Max.}$",
+  "$SD$", "$\\text{Skewness}$", "$\\text{Kurtosis}$", "$SE$",
+  "$\\text{Normality}^{\\dagger}$"
+)
+
+footnote_text <- glue(
+  "Shapiro-Wilk Test$^{{\\dagger}}$<br>",
+  "'&#x2014;' indicates variables with $\\leq 4$ unique values ",
+  "(normality test not applicable)"
+)
+```
+
+```{r}
+#| label: tbl-descriptive-stats-all
+#| tbl-cap: "Descriptive Statistics for Analysis-Ready Dataset"
+#| code-fold: show
+#| column: page-right
+
+imputed_data %>%
+  dplyr::select(-idnummer) %>%
+  setNames(beautify_names(names(.))) %>%
+  describe(
+    normality = TRUE,
+    print_only = FALSE
+  ) %>%
+  dplyr::rowwise() %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-p) %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+## Stratified Descriptive Statistics
+
+### Partnered Respondents
+
+```{r}
+#| label: tbl-descriptive-stats-partnered
+#| tbl-cap: "Descriptive Statistics: Partnered Respondents"
+#| code-fold: show
+#| column: page-right
+
+imputed_data %>%
+  dplyr::filter(partner == 1) %>%
+  dplyr::select(-idnummer, -partner) %>%
+  setNames(beautify_names(names(.))) %>%
+  describe(
+    normality = TRUE,
+    print_only = FALSE
+  ) %>%
+  dplyr::rowwise() %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-p) %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+### Non-Partnered Respondents
+
+```{r}
+#| label: tbl-descriptive-stats-non-partnered
+#| tbl-cap: "Descriptive Statistics: Non-Partnered Respondents"
+#| code-fold: show
+#| column: page-right
+
+# prepare non-partnered data, removing partner-specific variables
+non_partnered_data <- imputed_data %>%
+  dplyr::filter(partner == 0) %>%
+  dplyr::select(
+    -idnummer, -partner,
+    -dplyr::any_of(c("education_partner", "isei08_partner"))
+  )
+
+# remove columns with all NA values (if any remain)
+non_partnered_data <- non_partnered_data %>%
+  dplyr::select(where(~ !all(is.na(.x))))
+
+non_partnered_data %>%
+  setNames(beautify_names(names(.))) %>%
+  describe(
+    normality = TRUE,
+    print_only = FALSE
+  ) %>%
+  dplyr::rowwise() %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-p) %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+## Export Analysis-Ready Dataset
+
+```{r}
+#| label: export-final-dataset
+#| code-fold: show
+#| column: body-outset-right
+
+# save finalized dataset for downstream analysis
+haven::write_sav(
+  imputed_data,
+  here::here("assets", "data", "saved", "analysis_ready.sav")
+)
+```
+
+## Variable Summary
+
+```{r}
+#| label: variable-summary-attrs
+#| code-fold: true
+#| column: body-outset-right
+
+col_names <- c(
+  "Variable", "Type", "$n_{valid}$", "$n_{miss}$",
+  "$\\%_{miss}$", "$n_{unique}$", "Category"
+)
+
+footnote_text <- glue("$N = {n_obs}$")
+```
+
+```{r}
+#| label: tbl-variable-summary
+#| tbl-cap: "Variable Summary for Analysis-Ready Dataset"
+#| code-fold: show
+#| column: page-right
+
+# create comprehensive variable summary
+var_summary <- data.frame(
+  variable = names(imputed_data),
+  stringsAsFactors = FALSE
+) %>%
+  dplyr::mutate(
+    type = sapply(imputed_data, function(x) {
+      if (is.numeric(x)) "Numeric" else if (is.factor(x)) "Factor" else class(x)[1]
+    }),
+    n_valid = sapply(imputed_data, function(x) sum(!is.na(x))),
+    n_miss = sapply(imputed_data, function(x) sum(is.na(x))),
+    pct_miss = round(100 * n_miss / n_obs, 1),
+    n_unique = sapply(imputed_data, function(x) length(unique(x[!is.na(x)]))),
+    category = dplyr::case_when(
+      variable == "idnummer" ~ "Identifier",
+      grepl("^education", variable) ~ "Education",
+      grepl("^isei08", variable) ~ "Occupation (ISEI-08)",
+      grepl("^isco08r", variable) ~ "Occupation (ISCO-08)",
+      grepl("^brc14", variable) ~ "Occupation (BRC-14)",
+      grepl("^dhd", variable) ~ "Dietary Outcome",
+      grepl("income", variable) ~ "Income",
+      grepl("partner", variable) ~ "Partner Status",
+      TRUE ~ "Other"
+    )
+  ) %>%
+  dplyr::arrange(category, variable) %>%
+  dplyr::mutate(variable = beautify_names(variable))
+
+var_summary %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+## Output
+
+| File                                     | Content                                             |
+|------------------------------------------|-----------------------------------------------------|
+| `assets/data/saved/analysis_ready.sav`   | Analysis-ready dataset with verified SES composites |
+
+**Next:** [Step 7 (Unadjusted Models)](/analysis/models/unadjusted/index.qmd)

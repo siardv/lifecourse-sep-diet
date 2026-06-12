@@ -1,0 +1,684 @@
+---
+title: "ISCO-08 Standardization and Validation"
+subtitle: "Mapping to BRC14 and ISEI-08 Classifications"
+author: "Siard van den Bosch"
+date: 2023-08-31
+date-modified: last-modified
+---
+
+```{=html}
+<script>
+  window.config = {offset: 2};
+</script>
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+|                |         |
+| -------------- | ------- |
+| **Purpose**    | Validate ISCO-08 codes; derive BRC14 and ISEI-08 mappings |
+| **Inputs**     | `main_initial.sav`, `isco08_codes.xlsx`, `brc2014.xls` |
+| **Outputs**    | `main_corrected.sav`, `brc14_map.R`, `isco08_to_brc14.R`, `isco08_to_isei08.R` |
+| **Method**     | Manual code correction; ISCO-08 to BRC14/ISEI-08 crosswalk |
+| **Requires**   | [Step 1 (Setup)](/analysis/setup/index.qmd) |
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+::: {.callout-note icon=false}
+## Rationale
+
+- ISEI-08 scoring: continuous occupational status measure with validated cross-national comparability [@ganzeboom2010]
+:::
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+```{r}
+#| label: load-project-resources
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# clear global env and force full garbage collection
+rm(list = ls(envir = .GlobalEnv), envir = .GlobalEnv)
+invisible(gc(full = TRUE))
+
+# detach non-base packages to avoid namespace interference
+invisible(lapply(grep(":|autoloads|globalenv", search(),
+  invert = TRUE, value = TRUE, ignore.case = TRUE
+), detach, character.only = TRUE, unload = TRUE, force = TRUE))
+
+# source custom functions for text processing and data handling
+purrr::walk(file.path(here::here("assets", "functions"), paste0(c(
+  "sci_to_tex", "md_to_html", "set_globals", "decapitalize",
+  "save_function", "add_style", "suppress_output", "import_pipes",
+  "numeric_df", "as_kable", "empty_to_na", "drop_all_na_rows",
+  "named_list", "std_text", "beautify_names", "footnote"
+), ".R")), source)
+
+# set global options and import pipe operators
+set_globals()
+import_pipes()
+```
+
+
+## Define Constants
+
+Respondent-type suffixes govern column naming throughout the step.
+
+```{r}
+#| label: define-constants
+#| code-fold: true
+#| column: body-outset-right
+
+# suffixes map respondent roles to column name patterns
+# empty string for respondent self, underscore-prefixed for others
+suffixes <- c("partner", "mother", "father") %>%
+  setNames(object = sprintf("_%s", .)) %>%
+  c("respondent" = "", .)
+
+# occupation column names derived from suffixes
+occupation_columns <- paste0("occupation", unname(suffixes))
+```
+
+## Load Data
+
+```{r}
+#| label: load-data
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# load initial dataset and rename ISCO-08 columns for clarity
+main <- haven::read_sav(here::here("assets", "data", "main_initial.sav")) %>%
+  dplyr::rename(
+    isco08_old = BRC14,
+    isco08_old_father = BRC14_father,
+    isco08_old_mother = BRC14_mother,
+    isco08_old_partner = BRC14_partner
+  )
+
+# import corrected ISCO-08 codes from external source
+xlsx <- readxl::read_xlsx(
+  here::here("assets", "data", "isco08_codes.xlsx"),
+  sheet = 1
+)
+```
+
+## Clean and Standardize Data
+
+- *in*: `main`
+- *out*: `main_with_copies` with `_init` and `_cleaned` occupation columns
+- *rule*: set two invalid entries (`idnummer` 2023, 1854) to `NA`; standardize text via `std_text()`
+
+```{r}
+#| label: data-cleaning
+#| code-fold: show
+#| column: body-outset-right
+
+# replace invalid occupation entries with NA (case-specific corrections)
+main[main$idnummer == 2023, "occupation_mother"] <- NA
+main[main$idnummer == 1854, "occupation_partner"] <- NA
+
+# generate initial and cleaned copies of occupation data
+main_with_copies <- main %>%
+  dplyr::mutate(dplyr::across(
+    tidyselect::all_of(occupation_columns),
+    list(
+      init = ~.,
+      cleaned = ~ std_text(.)
+    ),
+    .names = "{col}_{fn}"
+  ))
+```
+
+## Define Classification Mapping Functions
+
+Three functions: `brc14_map()` retrieves the CBS crosswalk, `isco08_to_brc14()` returns BRC14 group codes, and `isco08_to_isei08()` returns ISEI-08 scores.
+
+```{r}
+#| label: define-mapping-functions
+#| code-fold: show
+#| column: body-outset-right
+
+# fetch BRC2014 mapping from local file or download if absent
+brc14_map <- function() {
+  local_file <- here::here("assets", "data", "brc2014.xls")
+  if (!file.exists(local_file)) {
+    download_url <- glue(
+      "https://www.cbs.nl/-/media/imported/",
+      "onze-diensten/methoden/classificaties/",
+      "documents/2015/09/brc2014.xls"
+    )
+    download.file(download_url, local_file, mode = "wb")
+  }
+  m <- readxl::read_excel(local_file, sheet = 2)
+
+  # code columns are zero-padded text in the workbook; parse to numeric so
+  # armed-forces codes (e.g. '0110') match numeric isco08 values
+  m$ISCO2008unitgroup <- as.numeric(m$ISCO2008unitgroup)
+  m$BRC2014beroepsgroep <- as.numeric(m$BRC2014beroepsgroep)
+  stopifnot(!anyNA(m$ISCO2008unitgroup), !anyNA(m$BRC2014beroepsgroep))
+  m
+}
+
+# convert ISCO-08 codes to BRC14 classifications
+isco08_to_brc14 <- function(x) {
+  m <- brc14_map()
+  purrr::map_dbl(x, ~ m$BRC2014beroepsgroep[
+    match(.x, m$ISCO2008unitgroup, nomatch = NA)
+  ])
+}
+
+# convert ISCO-08 codes to ISEI-08 scores with error handling
+isco08_to_isei08 <- function(x) {
+  sapply(x, function(code) {
+    if (is.na(code)) {
+      return(NA)
+    }
+    tryCatch(
+      ISCO08ConveRsions::isco08toisei08(
+        formatC(as.integer(code), width = 4, flag = "0", format = "d")
+      ),
+      error = function(e) NA
+    )
+  })
+}
+```
+
+## Preserve Mapping Functions
+
+```{r}
+#| label: save-mapping-functions
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# suppress output during function saving
+suppress_output({
+  save_function(brc14_map)
+  save_function(isco08_to_brc14)
+  save_function(isco08_to_isei08)
+})
+```
+
+## Integrate Corrected ISCO Codes
+
+```{r}
+#| label: define-rename-function
+#| code-fold: show
+#| column: body-outset-right
+
+# standardize column names for merging across respondent types
+rename_and_select <- function(data, suffix = "") {
+  require(rlang, quietly = TRUE)
+  suffix <- if (suffix == "") suffix else paste0("_", suffix)
+
+  out <- data %>%
+    dplyr::rename(
+      !!paste0("isco08_old", suffix) := isco08_init,
+      !!paste0("occupation", if (suffix == "") "" else suffix, "_cleaned") := occupation,
+      !!paste0("isco08", suffix) := isco08,
+      !!paste0("isco08_new", suffix) := isco08_new
+    ) %>%
+    dplyr::select(-source)
+
+  names(out) <- gsub("[_]+", "_", names(out))
+  return(out)
+}
+```
+
+- *in*: `xlsx`, `main_with_copies`
+- *out*: `groups_with_classifications` (with BRC14 and ISEI-08 columns)
+- *rule*: justified corrections (`isco08_new`) coalesce over the curator's final codes (`isco08`); initial codes the curator nullified remain `NA`; first non-missing value per `idnummer`
+
+```{r}
+#| label: integrate-corrected-codes
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# select relevant columns from corrected data
+corrected <- xlsx %>%
+  dplyr::select(idnummer, source, occupation, isco08, isco08_init, isco08_new)
+
+# curator code columns are stored as text cells in the workbook; parse to
+# numeric and fail loudly if any non-empty value is not a clean code
+parse_code <- function(x) {
+  chr <- dplyr::na_if(trimws(as.character(x)), "")
+  out <- suppressWarnings(as.numeric(chr))
+  stopifnot(identical(is.na(out), is.na(chr)))
+  out
+}
+
+corrected <- corrected %>%
+  dplyr::mutate(dplyr::across(c(isco08, isco08_init, isco08_new), parse_code))
+
+# split corrected data by respondent type
+groups <- dplyr::group_split(corrected, source)
+
+# apply renaming and remove fully NA rows before merging
+group_sources <- purrr::map_chr(groups, ~ as.character(.x$source[[1]]))
+suffixes_ordered <- suffixes[group_sources]
+
+groups <- setNames(
+  object = purrr::map2(groups, unname(suffixes_ordered), rename_and_select),
+  nm = unname(suffixes_ordered)
+) %>%
+  lapply(drop_all_na_rows)
+
+# treat "" as missing, then take first non-missing value
+pick_first_non_na <- function(x) {
+  if (is.character(x)) x[x == ""] <- NA_character_
+  y <- x[!is.na(x)]
+  if (length(y) == 0) {
+    return(x[1][NA]) # returns typed NA
+  }
+  y[[1]]
+}
+
+# quick diagnostics per group (which ids are duplicated)
+dup_ids_by_group <- purrr::imap(
+  groups,
+  ~ .x %>%
+    dplyr::count(idnummer, name = "n") %>%
+    dplyr::filter(n > 1) %>%
+    dplyr::mutate(source = .y) %>%
+    dplyr::arrange(dplyr::desc(n), idnummer)
+)
+
+# collapse each group to one row per idnummer
+groups_1row <- purrr::map(
+  groups,
+  ~ .x %>%
+    dplyr::group_by(idnummer) %>%
+    dplyr::summarise(
+      dplyr::across(dplyr::everything(), pick_first_non_na),
+      .groups = "drop"
+    )
+)
+
+# flag ids where a column had >1 distinct non-missing value inside a group
+conflicts_by_group <- purrr::imap(
+  groups,
+  ~ .x %>%
+    dplyr::group_by(idnummer) %>%
+    dplyr::summarise(
+      dplyr::across(
+        dplyr::everything(),
+        ~ dplyr::n_distinct(.[!is.na(.)]) > 1
+      ),
+      .groups = "drop"
+    ) %>%
+    dplyr::filter(dplyr::if_any(-idnummer, isTRUE)) %>%
+    dplyr::mutate(source = .y)
+)
+
+# join one-to-one to prevent many-to-many issues
+groups <- groups_1row %>%
+  Reduce(f = function(x, y) {
+    dplyr::full_join(x, y, by = "idnummer", relationship = "one-to-one")
+  })
+
+# coalesce old and new ISCO codes for each respondent type
+groups_coalesced <- groups %>%
+  dplyr::mutate(
+    isco08r = dplyr::coalesce(isco08_new, isco08),
+    isco08r_father = dplyr::coalesce(isco08_new_father, isco08_father),
+    isco08r_mother = dplyr::coalesce(isco08_new_mother, isco08_mother),
+    isco08r_partner = dplyr::coalesce(isco08_new_partner, isco08_partner)
+  )
+
+# generate BRC14 and ISEI-08 classifications from final ISCO codes
+groups_with_classifications <- groups_coalesced %>%
+  dplyr::mutate(
+    dplyr::across(
+      dplyr::matches("isco08r"),
+      ~ isco08_to_brc14(.),
+      .names = "{gsub('isco08r', 'brc14', .col)}"
+    ),
+    dplyr::across(
+      dplyr::matches("isco08r"),
+      ~ isco08_to_isei08(.),
+      .names = "{gsub('isco08r', 'isei08', .col)}"
+    )
+  )
+```
+
+## Finalize Analytical Dataset
+
+- *in*: `main_with_copies`, `groups_with_classifications`
+- *out*: `main_corrected.sav`
+- *rule*: empty strings to `NA`; occupation text set to `NA` where final ISCO-08 code is `NA`
+
+```{r}
+#| label: finalize-dataset
+#| code-fold: show
+#| column: body-outset-right
+
+# replace empty strings with NA in character columns
+remove_empty_strings <- function(data_frame) {
+  dplyr::mutate(
+    data_frame,
+    dplyr::across(
+      dplyr::where(is.character),
+      ~ dplyr::if_else(.x == "", NA_character_, .x)
+    )
+  )
+}
+
+# subset relevant columns and clean empty strings
+groups_subset <- groups_with_classifications %>%
+  dplyr::select(
+    idnummer,
+    dplyr::all_of(paste0(occupation_columns, "_cleaned")),
+    dplyr::matches("isco08r"),
+    dplyr::matches("brc14", ignore.case = FALSE),
+    dplyr::matches("isei08")
+  ) %>%
+  remove_empty_strings()
+
+# merge with main dataset and standardize column names
+main_cleaned <- main_with_copies %>%
+  remove_empty_strings() %>%
+  dplyr::select(-dplyr::any_of(c("source", "imputed"))) %>%
+  dplyr::left_join(
+    groups_subset %>%
+      dplyr::select(-dplyr::all_of(paste0(occupation_columns, "_cleaned"))),
+    by = "idnummer",
+    relationship = "one-to-one"
+  ) %>%
+  setNames(decapitalize(names(.)))
+
+# guard against silent row inflation from the merge
+stopifnot(nrow(main_cleaned) == nrow(main_with_copies))
+
+# ensure occupation aligns with corrected ISCO codes
+for (suffix in unname(suffixes)) {
+  isco_col <- paste0("isco08r", suffix)
+  occ_col <- paste0("occupation", suffix)
+  main_cleaned[[occ_col]][is.na(main_cleaned[[isco_col]])] <- NA
+}
+main <- main_cleaned
+
+# export corrected dataset for subsequent use
+haven::write_sav(main, here::here("assets", "data", "saved", "main_corrected.sav"))
+```
+
+## Visualize Classification Corrections
+
+```{r}
+#| label: visualize-corrections
+#| fig-cap: "Comparison of the Initial and Corrected ISCO-08 Codes"
+#| fig-subcap: true
+#| layout-ncol: 2
+#| layout-type: grid
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# scatter plot with regression line to visualize code corrections
+scatter <- function(x_var, y_var, title, point_size = 2) {
+  # filter complete cases for plotting
+  df_clean <- main %>%
+    dplyr::select(dplyr::all_of(c(x_var, y_var))) %>%
+    dplyr::filter(complete.cases(.))
+
+  # compute linear model for trend visualization
+  fit <- lm(as.formula(paste(y_var, "~", x_var)), data = df_clean)
+
+  # add residuals and predictions to dataset
+  df_clean$resids <- residuals(fit)
+  df_clean$y_hat <- predict(fit)
+  df_clean$resids_trans <- sqrt(abs(df_clean$resids))
+
+  # generate scatter plot with color-coded deviations
+  df_clean %>%
+    ggplot2::ggplot(ggplot2::aes(
+      x = .data[[x_var]],
+      y = .data[[y_var]],
+      color = resids_trans
+    )) +
+    ggplot2::geom_smooth(
+      method = "lm",
+      se = FALSE,
+      color = "black",
+      linewidth = 0.8,
+      formula = y ~ x
+    ) +
+    ggplot2::geom_jitter(
+      size = point_size,
+      alpha = 0.6,
+      width = 0.2,
+      height = 0.2
+    ) +
+    ggplot2::scale_color_viridis_c(option = "plasma", name = "Deviation") +
+    ggplot2::labs(
+      title = title,
+      x = "ISCO-08 (Corrected)",
+      y = "ISCO-08 (Original)"
+    )
+}
+
+# plot comparisons for each respondent type
+scatter("isco08r", "isco08_old", "Respondent")
+scatter("isco08r_partner", "isco08_old_partner", "Partner")
+scatter("isco08r_father", "isco08_old_father", "Father")
+scatter("isco08r_mother", "isco08_old_mother", "Mother")
+```
+
+## Summarize ISCO Corrections
+
+Changed digits appear in red and unchanged digits in purple within each correction table.
+
+```{r}
+#| label: define-table-formatting
+#| code-fold: true
+#| column: body-outset-right
+
+# apply HTML formatting to column names (reduce bracket font size)
+format_brackets <- function(vec) {
+  stringr::str_replace_all(vec, c(
+    "\\(([^)]+)\\)" = "<span style='font-size: 0.8em; white-space: nowrap;'>(\\1)</span>",
+    "ISCO-08" = "ISCO&#8209;08"
+  ))
+}
+
+# column headers for ISCO corrections table
+col_names <- format_brackets(c(
+  "ID No.",
+  "Occupation (as reported)$\\ ^1$",
+  "ISCO-08 (original)",
+  "ISCO-08 Group (original)",
+  "ISCO-08 (corrected)",
+  "ISCO-08 Group (corrected)",
+  "Justification"
+))
+```
+
+```{r}
+#| label: define-highlight-functions
+#| code-fold: show
+#| column: body-outset-right
+
+# split strings into characters and pad for alignment
+split_and_pad <- function(x, max_len) {
+  chars <- unlist(strsplit(as.character(x), ""))
+  pad <- rep("_", max_len - nchar(x))
+  c(chars, pad)
+}
+
+# highlight differing digits in corrected codes
+highlight_diff_digits <- function(a, b) {
+  # return b if either input is NA
+  if (anyNA(c(a, b))) {
+    return(as.character(b))
+  }
+
+  # determine maximum length for padding
+  max_len <- max(nchar(a), nchar(b))
+
+  # split and pad strings to uniform length
+  a_digs <- split_and_pad(a, max_len)
+  b_digs <- split_and_pad(b, max_len)
+
+  # define colors for unchanged and changed digits
+  clr <- viridis::plasma(20, 1, 0)[seq(4, 12, length.out = 2)]
+
+  # format digits with HTML color coding
+  formatted <- paste0(
+    mapply(function(init, new) {
+      sprintf(
+        '<span style="color:%s;">%s</span>',
+        ifelse(init == new, clr[1], clr[2]),
+        new
+      )
+    }, a_digs, b_digs),
+    collapse = ""
+  )
+
+  # return b if formatting fails
+  if (is.na(formatted)) {
+    return(as.character(b))
+  }
+  return(formatted)
+}
+```
+
+```{r}
+#| label: define-summarize-function
+#| code-fold: show
+#| column: body-outset-right
+
+# generate summary table of ISCO corrections with explicit source name parameter
+summarize_isco_corrections <- function(x, source_name = NULL) {
+  # use provided source name or infer from variable name
+  source_name <- source_name %||% deparse(substitute(x))
+
+  # calculate total rows and justified corrections
+  tot_rows <- nrow(x)
+  just_df <- dplyr::filter(x, !is.na(isco08_new))
+  just_rows <- nrow(just_df)
+  pct_just <- round(just_rows / tot_rows * 100)
+
+  footnote_text <- glue(
+    "Correction records: $N={just_rows}$ ({pct_just}% of the {tot_rows} cases in ",
+    "{source_name}). Occupation titles remain in lowercase for consistency with ",
+    "reported data. Revised ISCO-08 codes reflect updates from original ",
+    "classifications, supported by a rationale for each change. Red digits ",
+    "highlight code modifications, while unchanged digits appear in purple."
+  )
+
+  # format table with styling and footnote
+  just_df %>%
+    as_kable() %>%
+    kableExtra::column_spec(seq(ncol(just_df)), extra_css = "vertical-align: top;") %>%
+    footnote() %>%
+    add_style()
+}
+```
+
+```{r}
+#| label: prepare-correction-tables
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# process corrected data and split by respondent type
+xlsx_grouped <- xlsx %>%
+  dplyr::rowwise() %>%
+  dplyr::mutate(
+    # apply highlighting to corrected ISCO codes
+    isco08_new = highlight_diff_digits(isco08_init, isco08_new)
+  ) %>%
+  dplyr::ungroup() %>%
+  # drop unnecessary column, if present
+  dplyr::select(-dplyr::any_of("isco08")) %>%
+  dplyr::group_by(source)
+
+xlsx_split <- dplyr::group_split(xlsx_grouped, .keep = FALSE)
+names(xlsx_split) <- dplyr::group_keys(xlsx_grouped)$source
+
+# place split groups in the global environment for downstream chunks
+list2env(xlsx_split, envir = .GlobalEnv)
+```
+
+```{r}
+#| label: footnote-summary
+#| tbl-cap: "Summary of ISCO-08 Correction Records by Respondent Category"
+#| code-fold: true
+#| column: body-outset-right
+
+# compute correction statistics per source with totals
+named_list(respondent, partner, mother, father) %>%
+  purrr::map_dfr(~ tibble::tibble(
+    total = nrow(.x), corrected = sum(!is.na(.x$isco08_new))
+  ), .id = "source") %>%
+  dplyr::bind_rows(dplyr::summarise(., source = "Total", dplyr::across(where(is.integer), sum))) %>%
+  dplyr::mutate(source = stringr::str_to_title(source), pct = round(corrected / total * 100, 1)) %>%
+  dplyr::rename(Category = source, `Total Records` = total, Corrected = corrected, `%` = pct) %$%
+  kableExtra::row_spec(kable_input = as_kable(.), nrow(.), bold = TRUE) %>%
+  add_style()
+```
+
+### Respondent Corrections
+
+```{r}
+#| label: isco-corrections-respondent
+#| tbl-cap: "Corrected ISCO-08 Codes with Justifications for Respondents"
+#| code-fold: true
+#| column: page-right
+
+summarize_isco_corrections(respondent, source_name = "respondent")
+```
+
+### Partner Corrections
+
+```{r}
+#| label: isco-corrections-partner
+#| tbl-cap: "Corrected ISCO-08 Codes with Justifications for Partners"
+#| code-fold: true
+#| column: page-right
+
+summarize_isco_corrections(partner, source_name = "partner")
+```
+
+### Mother Corrections
+
+```{r}
+#| label: isco-corrections-mother
+#| tbl-cap: "Corrected ISCO-08 Codes with Justifications for Mother"
+#| code-fold: true
+#| column: page-right
+
+summarize_isco_corrections(mother, source_name = "mother")
+```
+
+### Father Corrections
+
+```{r}
+#| label: isco-corrections-father
+#| tbl-cap: "Corrected ISCO-08 Codes with Justifications for Father"
+#| code-fold: true
+#| column: page-right
+
+summarize_isco_corrections(father, source_name = "father")
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+## Output
+
+| File                 | Content                                        |
+| -------------------- | ---------------------------------------------- |
+| `main_corrected.sav` | Dataset with corrected ISCO-08, BRC14, ISEI-08 |
+| `brc14_map.R`        | Function: fetch CBS BRC2014 crosswalk          |
+| `isco08_to_brc14.R`  | Function: map ISCO-08 codes to BRC14 groups    |
+| `isco08_to_isei08.R` | Function: map ISCO-08 codes to ISEI-08 scores  |
+
+**Next:** [Step 3 (Data Cleaning)](/analysis/data/cleaning/index.qmd)

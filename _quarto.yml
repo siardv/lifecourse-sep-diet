@@ -1,0 +1,97 @@
+# metadata
+project:
+  type: website
+  output-dir: _site
+  render:
+    - "analysis/setup/index.qmd"
+    - "analysis/data/preparation/index.qmd"
+    - "analysis/data/cleaning/index.qmd"
+    - "analysis/data/outliers/index.qmd"
+    - "analysis/data/imputation/index.qmd"
+    - "analysis/data/post-imputation/index.qmd"
+    - "analysis/models/unadjusted/index.qmd"
+    - "analysis/models/assumptions/index.qmd"
+    - "analysis/models/adjusted/index.qmd"
+    - "analysis/models/goodness-of-fit/model-fit/index.qmd"
+    - "analysis/models/goodness-of-fit/interaction-effects/index.qmd"
+    - "analysis/models/goodness-of-fit/performance-metrics/index.qmd"
+# execution
+execute:
+  cache: false
+# website
+website:
+  title: "Reproducible Diet & Health Analysis Pipeline"
+  page-footer: |
+    R version 4.6.0 (2026-04-24)<br>
+    Platform: aarch64-apple-darwin23<br>
+    Running under: macOS Tahoe 26.2<br>
+    Quarto 1.9.38<br>
+  navbar:
+    title: "SES & Diet Quality"
+    pinned: true
+    left:
+      - text: "Setup"
+        href: analysis/setup/index.html
+      - text: "Data Processing"
+        menu:
+          - text: "ISCO-08 Standardization"
+            href: analysis/data/preparation/index.html
+          - text: "Data Cleaning"
+            href: analysis/data/cleaning/index.html
+          - text: "Outliers Detection"
+            href: analysis/data/outliers/index.html
+          - text: "Missing Data Imputation"
+            href: analysis/data/imputation/index.html
+          - text: "Post-Imputation Finalization"
+            href: analysis/data/post-imputation/index.html
+      - text: "Modeling"
+        menu:
+          - text: "Unadjusted Models"
+            href: analysis/models/unadjusted/index.html
+          - text: "Influence Diagnostics"
+            href: analysis/models/assumptions/index.html
+          - text: "Adjusted Models"
+            href: analysis/models/adjusted/index.html
+      - text: "Model Evaluation"
+        menu:
+          - text: "Initial Model Evaluation"
+            href: analysis/models/goodness-of-fit/model-fit/index.html
+          - text: "Interaction Effects"
+            href: analysis/models/goodness-of-fit/interaction-effects/index.html
+          - text: "Bootstrapped Validation"
+            href: analysis/models/goodness-of-fit/performance-metrics/index.html
+    search: false
+  back-to-top-navigation: true
+  page-navigation: true
+  repo-url: https://github.com/siardv/lifecourse-sep-diet
+  repo-actions: [source, issue]
+# output
+format:
+  html:
+    theme: assets/style/cosmo.scss
+    mainfont: "Garamond"
+    linkcolor: "#0056b3"
+    fig-width: 7
+    fig-height: 5
+    fig-cap-location: top
+    code-line-numbers: true
+    code-copy: true
+    lightbox: true
+    code-overflow: scroll
+    highlight-style: assets/style/highlight.theme
+    code-tools:
+      source: false
+      toggle: true
+      caption: "Toggle Code"
+    toc: true
+    toc-title: "Contents"
+    toc-location: left
+    toc-depth: 5
+    number-sections: true
+    smooth-scroll: true
+    df-print: kable
+    bibliography: assets/bib/bibliography.bib
+    include-after-body:
+      - assets/js/utilities.html
+    css:
+      - assets/style/custom.css

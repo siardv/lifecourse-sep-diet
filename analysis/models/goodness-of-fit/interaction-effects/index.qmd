@@ -1,0 +1,803 @@
+---
+title: "Interaction Effects & Johnson–Neyman Analysis"
+subtitle: "Identifying Moderator Ranges for Significant Predictor Effects"
+author: "Siard van den Bosch"
+date: 2025-03-06
+date-modified: last-modified
+---
+
+```{=html}
+<script>
+  window.config = {offset: 11};
+</script>
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+|                |         |
+| -------------- | ------- |
+| **Purpose**    | Identify moderator ranges where gender × SES interaction effects reach significance |
+| **Inputs**     | `adjusted_data.rds`, `unadjusted_fits.rds`, `adjusted_fits.rds` |
+| **Outputs**    | none |
+| **Method**     | Johnson–Neyman intervals on bootstrap-derived vcov; Freedman–Diaconis binning |
+| **Requires**   | [Step 7 (Unadjusted Models)](/analysis/models/unadjusted/index.qmd), [Step 8 (Influence Diagnostics)](/analysis/models/assumptions/index.qmd), [Step 9 (Adjusted Models)](/analysis/models/adjusted/index.qmd) |
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+::: {.callout-note icon=false}
+## Rationale
+
+- Johnson–Neyman over pick-a-point: delineates exact moderator boundaries rather than testing simple slopes at chosen values [@finsaas2021]
+- Freedman–Diaconis binning: data-adaptive bin width robust to skewed moderator distributions [@bauer2005]
+- Binary-moderator interactions skipped: JN intervals require a continuous or multi-level moderator [@johnson1936]
+:::
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+## Load Project Resources
+
+```{r}
+#| label: load-project-resources
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# clear environment
+rm(list = ls(envir = .GlobalEnv), envir = .GlobalEnv)
+invisible(gc(full = TRUE))
+invisible(lapply(grep(":|autoloads|globalenv", search(),
+  invert = TRUE, value = TRUE, ignore.case = TRUE
+), detach, character.only = TRUE, unload = TRUE, force = TRUE))
+
+# source custom functions (consistent with steps 7-9)
+purrr::walk(file.path(here::here("assets", "functions"), paste0(c(
+  "as_kable", "footnote", "set_globals", "beautify_names", "structure_models",
+  "sci_to_tex", "row_grouping", "md_to_html", "pval_str", "format_p_value",
+  "dim_ci_rows", "add_style", "format_coef", "import_pipes", "numeric_df",
+  "suppress_output", "named_list"
+), ".R")), source)
+
+# set global options and import pipe operators
+set_globals()
+import_pipes()
+```
+
+## Load Data and Models
+
+```{r}
+#| label: load-data-and-models
+#| code-fold: show
+#| column: body-outset-right
+
+# load adjusted data from step 8 (sensitivity dataset)
+adjusted_data_path <- here::here("assets", "data", "saved", "adjusted_data.rds")
+if (!file.exists(adjusted_data_path)) {
+  stop("Missing input from Step 8: ", adjusted_data_path)
+}
+source_data <- readRDS(adjusted_data_path)
+
+# load model fits from steps 7 and 9
+unadjusted_fits_path <- here::here("assets", "models", "unadjusted_fits.rds")
+adjusted_fits_path <- here::here("assets", "models", "adjusted_fits.rds")
+
+if (!file.exists(unadjusted_fits_path)) {
+  stop("Missing input from Step 7: ", unadjusted_fits_path)
+}
+if (!file.exists(adjusted_fits_path)) {
+  stop("Missing input from Step 9: ", adjusted_fits_path)
+}
+
+# load fits and structure into nested list (unadjusted/adjusted × ols/robust)
+unadjusted_fits <- readRDS(unadjusted_fits_path)
+adjusted_fits <- readRDS(adjusted_fits_path)
+model_fits <- structure_models(unadjusted_fits, adjusted_fits)
+
+# assign model class to robust fits for compatibility with interactions package
+lmrobs <- model_fits$adjusted$robust %>%
+  purrr::map(~ `class<-`(.x, c("model", class(.x))))
+```
+
+```{r}
+#| label: verify-model-structure
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+# extract model identifiers for verification
+model_ids <- names(model_fits$adjusted$robust) %>%
+  stringr::str_extract("[0-9]+$") %>%
+  as.integer() %>%
+  sort()
+
+n_models <- length(model_ids)
+model_range <- paste0("Models ", min(model_ids), "–", max(model_ids))
+n_obs <- nrow(source_data)
+
+# identify models with second-order interactions (eligible for JN analysis)
+models_with_interactions <- model_fits$adjusted$robust %>%
+  purrr::map_lgl(function(m) {
+    if (is.null(m$fit)) {
+      return(FALSE)
+    }
+    terms_ <- terms(m$fit)
+    order_ <- attr(terms_, "order")
+    any(order_ == 2)
+  })
+
+interaction_model_ids <- names(model_fits$adjusted$robust)[models_with_interactions] %>%
+  stringr::str_extract("[0-9]+$") %>%
+  as.integer() %>%
+  sort()
+
+# binary moderator patterns (partner status is binary: 0/1)
+binary_patterns <- c("partner:education_partner", "partner:isei08_partner")
+
+# identify models with only binary-moderator interactions (excluded from JN)
+models_binary_only <- model_fits$adjusted$robust %>%
+  purrr::imap_chr(function(m, name) {
+    if (is.null(m$fit)) {
+      return(NA_character_)
+    }
+    terms_ <- terms(m$fit)
+    labels_ <- attr(terms_, "term.labels")[attr(terms_, "order") == 2]
+    if (length(labels_) == 0) {
+      return(NA_character_)
+    }
+    if (all(labels_ %in% binary_patterns)) gsub("model_", "", name) else NA_character_
+  }) %>%
+  na.omit() %>%
+  as.character()
+
+# models eligible for JN (have non-binary interactions)
+jn_eligible <- setdiff(interaction_model_ids, as.integer(models_binary_only))
+
+# verification callout
+verify_msg <- glue::glue(
+  "<div class='callout-note'>
+<strong>Step 7/9 Model Verification</strong><br><br>
+<strong>Models loaded:</strong> {n_models} models ({model_range})<br>
+<strong>Analysis dataset:</strong> {n_obs} observations (sensitivity sample from Step 8)<br>
+<strong>Models with interactions:</strong> {paste(interaction_model_ids, collapse = ', ')}<br>
+<strong>JN analysis applicable to:</strong> Models {paste(jn_eligible, collapse = ', ')}
+{if (length(models_binary_only) > 0) paste0('<br><em>Models ', paste(models_binary_only, collapse = ', '), ' skipped (binary moderator only)</em>') else ''}
+</div>"
+)
+cat(verify_msg)
+
+if (length(jn_eligible) == 0) {
+  warning("No models with continuous moderator interactions. JN analysis not applicable.")
+}
+```
+
+## Johnson–Neyman Functions
+
+```{r}
+#| label: calculate-optimal-interval-function
+#| code-fold: true
+#| column: body-outset-right
+
+# calculate optimal bin width for moderator variable
+calculate_optimal_interval <- function(data, method = c("fd", "scott", "sturges")) {
+  method <- match.arg(method)
+
+  if (is.null(data) || nrow(data) == 0) {
+    return(NULL)
+  }
+
+  modx <- data$modx
+  modx_range <- range(modx, na.rm = TRUE)
+  total_range <- diff(modx_range)
+
+  if (total_range < .Machine$double.eps) {
+    warning("Moderator has no variance; cannot compute interval.")
+    return(NULL)
+  }
+
+  interval <- switch(method,
+    fd = 2 * IQR(modx, na.rm = TRUE) / (nrow(data)^(1 / 3)),
+    scott = 3.5 * sd(modx, na.rm = TRUE) / (nrow(data)^(1 / 3)),
+    sturges = total_range / (log2(nrow(data)) + 1)
+  )
+
+  if (is.na(interval) || interval < .Machine$double.eps) {
+    interval <- total_range / 10
+  }
+
+  n_bins <- total_range / interval
+  if (n_bins < 5) interval <- total_range / 5
+  if (n_bins > 20) interval <- total_range / 20
+
+  magnitude <- 10^floor(log10(interval))
+  round(interval / magnitude) * magnitude
+}
+```
+
+```{r}
+#| label: validate-jn-intervals-input
+#| code-fold: true
+#| column: body-outset-right
+
+# validate inputs for JN interval summarization
+validate_jn_intervals_input <- function(x, interval = NULL) {
+  if (is.null(x)) {
+    warning("Input to summarize_jn_intervals is NULL.")
+    return(NULL)
+  }
+
+  required_columns <- c("modx", "slope", "conf.low", "conf.high", "sig")
+
+  validated <- purrr::map(x, function(elem) {
+    if (is.null(elem) || !is.data.frame(elem)) {
+      warning("Skipping NULL or non-data frame element.")
+      return(NULL)
+    }
+
+    if (!all(required_columns %in% colnames(elem))) {
+      warning("Required columns are missing from data. Skipping.")
+      return(NULL)
+    }
+
+    int_terms <- attr(elem, "terms")
+    if (is.null(int_terms) || length(int_terms) != 2) {
+      warning("Invalid or missing terms attribute. Skipping.")
+      return(NULL)
+    }
+
+    elem_interval <- interval
+    if (is.null(elem_interval)) {
+      elem_interval <- calculate_optimal_interval(elem, method = "fd")
+      if (is.null(elem_interval)) {
+        warning("Interval calculation failed. Skipping.")
+        return(NULL)
+      }
+    }
+
+    list(data = elem, interval = elem_interval, terms = int_terms)
+  })
+
+  purrr::compact(validated)
+}
+```
+
+```{r}
+#| label: summarize-jn-intervals-function
+#| code-fold: true
+#| column: body-outset-right
+
+# summarize JN analysis results into interpretable intervals
+summarize_jn_intervals <- function(jn_result, interval = NULL) {
+  x <- jn_result$data
+  model_name <- deparse(jn_result$call$model)
+
+  validated_inputs <- validate_jn_intervals_input(x, interval)
+  if (is.null(validated_inputs) || length(validated_inputs) == 0) {
+    return(NULL)
+  }
+
+  summaries <- purrr::map(validated_inputs, function(input) {
+    input$data %>%
+      dplyr::mutate(modx_grp = round(modx / input$interval) * input$interval) %>%
+      dplyr::group_by(modx_grp) %>%
+      dplyr::summarize(
+        avg_slope = mean(slope, na.rm = TRUE),
+        min_conf = min(conf.low, na.rm = TRUE),
+        max_conf = max(conf.high, na.rm = TRUE),
+        sig_count = sum(sig == "Significant", na.rm = TRUE),
+        n_obs = dplyr::n(),
+        sig_perc = ifelse(n_obs > 0, round((sig_count / n_obs) * 100, 1), NA_real_),
+        .groups = "drop"
+      ) %>%
+      dplyr::arrange(modx_grp) %>%
+      dplyr::mutate(
+        term1 = beautify_names(input$terms[[1]]),
+        term2 = beautify_names(input$terms[[2]]),
+        int_size = input$interval
+      ) %>%
+      `attr<-`("n_groups", nrow(.)) %>%
+      `attr<-`("int_size", input$interval)
+  })
+
+  summaries %>%
+    purrr::compact() %>%
+    dplyr::bind_rows() %>%
+    dplyr::mutate(model = gsub("model_", "", model_name)) %>%
+    dplyr::select(model, term1, term2, int_size, dplyr::everything())
+}
+```
+
+```{r}
+#| label: second-order-interactions-function
+#| code-fold: true
+#| column: body-outset-right
+
+# extract second-order interaction terms from model
+second_order_interactions <- function(fit) {
+  terms_ <- terms(fit)
+  order_ <- attr(terms_, "order")
+
+  inter_terms <- attr(terms_, "term.labels")
+  inter_terms <- inter_terms[order_ == 2]
+
+  strsplit(inter_terms, ":")
+}
+```
+
+```{r}
+#| label: plot-utilities
+#| code-fold: true
+#| column: body-outset-right
+
+# clean linetype mappings in ggplot layers
+clean_layer_linetypes <- function(plot) {
+  if (!inherits(plot, "ggplot")) {
+    stop("The input must be a ggplot object.")
+  }
+
+  plot$layers <- purrr::map(plot$layers, function(layer) {
+    .linetype <- layer$mapping$linetype
+    if (!is.null(.linetype)) {
+      layer$mapping$linetype <- rlang::quo(
+        stringr::str_squish(rlang::as_name(.linetype))
+      )
+    }
+    layer
+  })
+
+  plot
+}
+
+# format variable names with smaller parenthetical text for plot labels
+shrink_parens <- function(txt) {
+  txt <- beautify_names(txt, as_HTML = FALSE)
+  match_res <- regexpr("\\s+\\(([^)]+)\\)", txt, perl = TRUE)
+
+  if (match_res < 1) {
+    return(bquote(bold(.(txt))))
+  }
+
+  in_txt <- regmatches(txt, match_res)
+  bef_txt <- substr(txt, 1, match_res - 1)
+  aft_start <- match_res + attr(match_res, "match.length")
+  aft_txt <- if (aft_start <= nchar(txt)) {
+    substr(txt, aft_start, nchar(txt))
+  } else {
+    ""
+  }
+
+  bquote(bold(.(bef_txt)) ~ bold(scriptstyle(.(in_txt))) ~ bold(.(aft_txt)))
+}
+```
+
+```{r}
+#| label: jn-eval-function
+#| code-fold: true
+#| column: body-outset-right
+
+# validate inputs and extract variance-covariance matrix for JN analysis
+jn_eval <- function(model, pred_var, mod_var) {
+  df <- model.frame(model$fit)
+
+  if (!(pred_var %in% names(df))) {
+    stop(glue::glue("Predictor variable {pred_var} not found"))
+  }
+  if (!(mod_var %in% names(df))) {
+    stop(glue::glue("Moderator variable {mod_var} not found"))
+  }
+  if (is.null(model$bootstrap$ests)) {
+    stop("No bootstrap estimates found in model; bootstrapping not performed")
+  }
+
+  boot_mat <- as.matrix(model$bootstrap$ests)
+  vcov_mat <- tryCatch(
+    cov(boot_mat),
+    error = function(err) {
+      stop(glue::glue("Error calculating vcov matrix: {err$message}"))
+    }
+  )
+
+  if (interactive()) {
+    message(glue::glue("Variables used in interaction:\n{pred_var}\n{mod_var}"))
+  }
+
+  vcov_mat
+}
+```
+
+```{r}
+#| label: jn-analysis
+#| code-fold: show
+#| column: body-outset-right
+
+# test whether a variable is effectively binary (at most 2 unique non-NA values)
+is_binary_var <- function(v, df) {
+  vals <- stats::na.omit(df[[v]])
+  length(unique(vals)) <= 2L
+}
+
+# perform Johnson-Neyman analysis for all second-order interactions
+jn_analysis <- function(model, dep_var = "DHD-index", alpha = 0.05) {
+  call_expr <- match.call()
+  int_terms <- second_order_interactions(model$fit)
+
+  if (length(int_terms) == 0) {
+    message("No second-order interactions found in the model")
+    return(NULL)
+  }
+
+  df <- model.frame(model$fit)
+
+  results <- purrr::map(int_terms, function(term) {
+    # orient predictor vs moderator by type, not by alphabetical position
+    bin <- vapply(term, is_binary_var, logical(1), df = df)
+
+    if (sum(bin) == 2L) {
+      # both binary: JN is not informative, skip
+      message(glue::glue(
+        "Skipping Johnson-Neyman analysis for {paste(term, collapse = ':')} ",
+        "(both variables binary; no continuous moderator)."
+      ))
+      return(NULL)
+    } else if (sum(bin) == 1L) {
+      # one binary, one continuous: binary is predictor, continuous moderates
+      pred_var <- term[bin]
+      mod_var <- term[!bin]
+    } else {
+      # both continuous: fall back to term order (either orientation valid)
+      mod_var <- term[[1]]
+      pred_var <- term[[2]]
+    }
+
+    # compute bootstrap-based vcov matrix
+    vcov_mat <- jn_eval(model, pred_var, mod_var)
+
+    # run JN analysis via interactions package
+    jn_res <- tryCatch(
+      interactions::johnson_neyman(
+        model = model$fit,
+        pred = !!rlang::sym(pred_var),
+        modx = !!rlang::sym(mod_var),
+        vmat = vcov_mat,
+        alpha = alpha,
+        plot = FALSE,
+        df = "residual"
+      ),
+      error = function(err) {
+        message(glue::glue(
+          "Johnson-Neyman analysis failed for {pred_var} and {mod_var}: {err$message}"
+        ))
+        NULL
+      }
+    )
+
+    if (is.null(jn_res)) {
+      return(NULL)
+    }
+
+    # standardize column names from interactions output
+    jn_data <- jn_res$cbands %>%
+      dplyr::rename_with(~"slope", dplyr::starts_with("Slope of ")) %>%
+      dplyr::rename(
+        modx = !!rlang::sym(mod_var),
+        conf.low = Lower,
+        conf.high = Upper,
+        sig = Significance
+      )
+
+    list(
+      data = jn_data,
+      raw_plot = clean_layer_linetypes(jn_res$plot),
+      pred_var = pred_var,
+      mod_var = mod_var,
+      dep_var = dep_var
+    )
+  })
+
+  # filter to valid results and attach terms
+  valid_idx <- purrr::map_lgl(results, ~ !is.null(.x))
+  valid_terms <- int_terms[valid_idx]
+  valid_out <- purrr::compact(results)
+  jn_data_list <- purrr::compact(purrr::map(valid_out, ~ .x$data))
+
+  for (i in seq_along(jn_data_list)) {
+    attr(jn_data_list[[i]], "terms") <- valid_terms[[i]]
+  }
+
+  res <- list(
+    data = jn_data_list,
+    raw_plots = valid_out,
+    model = model,
+    call = call_expr
+  )
+  class(res) <- "jn_result"
+  res
+}
+```
+
+```{r}
+#| label: jn-result-methods
+#| code-fold: true
+#| column: body-outset-right
+
+# print method for jn_result objects
+print.jn_result <- function(x, ...) {
+  cat("Johnson-Neyman Analysis Result\n")
+  cat("Number of interactions analyzed:", length(x$data), "\n")
+  invisible(x)
+}
+
+# plot method for jn_result objects
+plot.jn_result <- function(x, plot_significant_only = FALSE, ...) {
+  raw_plots <- x$raw_plots
+
+  if (length(raw_plots) == 0) {
+    message("No plots available")
+    return(invisible(NULL))
+  }
+
+  model_frame <- model.frame(x$model$fit)
+
+  has_significant <- function(jn_data) {
+    any(jn_data$sig == "Significant")
+  }
+
+  if (plot_significant_only) {
+    raw_plots <- purrr::keep(raw_plots, ~ has_significant(.x$data))
+  }
+
+  if (length(raw_plots) == 0) {
+    message("No plots with significant ranges to display")
+    return(invisible(NULL))
+  }
+
+  # generate customized plots
+  final_plots <- purrr::map(raw_plots, function(res) {
+    slope_label <- bquote(
+      atop(
+        "Slope of " ~ .(shrink_parens(res$pred_var)) ~
+          " on " ~ bold("DHD-index"),
+        "for values of " ~ .(shrink_parens(res$mod_var))
+      )
+    )
+
+    p <- res$raw_plot +
+      ggplot2::labs(
+        title = NULL,
+        x = shrink_parens(res$mod_var),
+        y = slope_label,
+        fill = NULL,
+        color = NULL
+      ) +
+      ggplot2::scale_fill_manual(
+        values = c(
+          "Data range" = "black",
+          "Insignificant" = "grey",
+          "Significant" = "#21908C"
+        ),
+        labels = c(
+          "Data range" = "Data range",
+          "Insignificant" = bquote(italic("n.s.")),
+          "Significant" = bquote(italic("p < .05"))
+        ),
+        breaks = c("Data range", "Insignificant", "Significant"),
+        guide = ggplot2::guide_legend(order = 1, title = NULL)
+      ) +
+      ggplot2::scale_color_manual(
+        values = c("Insignificant" = "grey", "Significant" = "#21908C"),
+        guide = "none"
+      ) +
+      garamond_theme +
+      ggplot2::theme(
+        axis.title.y = ggplot2::element_text(size = 11, hjust = 0.5),
+        axis.title.x = ggplot2::element_text(
+          size = 12,
+          margin = ggplot2::margin(t = 10)
+        ),
+        legend.key.size = grid::unit(0.4, "cm"),
+        legend.key.width = grid::unit(0.4, "cm"),
+        legend.key.height = grid::unit(0.4, "cm"),
+        legend.spacing.x = grid::unit(0.2, "cm"),
+        legend.text = ggplot2::element_text(size = 8, hjust = 0.5, vjust = 0.5),
+        legend.box.spacing = grid::unit(0.3, "cm"),
+        legend.box.margin = ggplot2::margin(t = 0, r = 5, b = 5, l = 5),
+        plot.margin = ggplot2::margin(t = 50, r = 15, b = 30, l = 15)
+      )
+
+    # add rug plot showing moderator distribution
+    if (res$mod_var %in% names(model_frame)) {
+      mod_values <- model_frame[[res$mod_var]]
+      n_unique <- length(unique(mod_values))
+
+      # for binary or low-cardinality moderators, use simple single-color rug
+      if (n_unique <= 5) {
+        p <- p +
+          ggplot2::geom_rug(
+            data = model_frame,
+            ggplot2::aes(x = .data[[res$mod_var]]),
+            sides = "b",
+            color = "#440154",
+            alpha = 0.6,
+            linewidth = 0.4,
+            length = grid::unit(0.02, "npc"),
+            outside = FALSE,
+            inherit.aes = FALSE
+          ) +
+          ggplot2::coord_cartesian(clip = "off") +
+          ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = 0.05))
+      } else {
+        # for continuous moderators, use viridis color scale
+        p <- p +
+          ggnewscale::new_scale_color() +
+          ggplot2::geom_rug(
+            data = model_frame,
+            ggplot2::aes(
+              x = .data[[res$mod_var]],
+              color = .data[[res$mod_var]]
+            ),
+            sides = "b",
+            alpha = 0.8,
+            linewidth = 0.5,
+            length = grid::unit(0.02, "npc"),
+            outside = FALSE,
+            inherit.aes = FALSE
+          ) +
+          ggplot2::scale_color_viridis_c(
+            option = "viridis",
+            name = beautify_names(res$mod_var, as_HTML = FALSE),
+            guide = ggplot2::guide_colorbar(
+              title.position = "top",
+              barheight = grid::unit(0.4, "cm"),
+              barwidth = grid::unit(2.5, "cm"),
+              order = 2
+            )
+          ) +
+          ggplot2::coord_cartesian(clip = "off") +
+          ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = 0.05))
+      }
+    } else {
+      warning(glue::glue(
+        "Moderator variable '{res$mod_var}' not found in model frame. ",
+        "Rug plot not added."
+      ))
+    }
+
+    p
+  })
+
+  old_par <- graphics::par(mfrow = c(ceiling(length(final_plots) / 2), 2))
+  on.exit(graphics::par(old_par))
+
+  purrr::walk(final_plots, print)
+  invisible(final_plots)
+}
+```
+
+## JN Results
+
+```{r}
+#| label: attach-model-fits
+#| code-fold: show
+#| column: body-outset-right
+
+# attach robust model fits for formula-style access
+robust_models <- model_fits$adjusted$robust
+if (!"robust_models" %in% search()) {
+  attach(robust_models)
+}
+
+# extract sample size for footnotes
+n_obs <- nrow(model.frame(model_fits$adjusted$robust$model_1$fit))
+```
+
+```{r}
+#| label: jn-table-attributes
+#| code-fold: true
+#| column: body-outset-right
+
+# column names for JN interval tables
+col_names <- c(
+  "Predictor", "$\\Delta x$", "Modx Group",
+  "$\\overline{\\beta}$", "$\\text{CI}_{\\text{low}}$",
+  "$\\text{CI}_{\\text{high}}$", "$\\Sigma \\text{ Sig.}$",
+  "$\\Sigma \\text{ Total}$", "$\\% \\text{Sig.}$"
+)
+
+# footnote text for JN interval tables
+footnote_text <- glue::glue(
+  "$N={n_obs}$ (sensitivity sample excluding influential observations). ",
+  "For each moderator bin ($\\Delta x$), mean slopes ($\\overline{{\\beta}}$) ",
+  "and 95\\% CIs are shown. $\\Sigma$ Sig. counts points within the bin where ",
+  "$p \\lt .05$; \\% Sig. = $\\Sigma$ Sig. / $\\Sigma$ Total. ",
+  "Greyed rows indicate CIs spanning zero."
+)
+```
+
+### Model 4: Gender × SES (Composite)
+
+```{r}
+#| label: jn-model-4-plot
+#| fig-cap: "Johnson–Neyman Regions (Model 4 – Composite Gender × SES)"
+#| fig-subcap: true
+#| layout-ncol: 3
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+m4 <- jn_analysis(model_4) %T>%
+  plot(plot_significant_only = FALSE) %>%
+  summarize_jn_intervals()
+```
+
+```{r}
+#| label: jn-model-4-df
+#| tbl-cap: "Johnson–Neyman Intervals (Model 4)"
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+if (!is.null(m4) && nrow(m4) > 0) {
+  m4 %>%
+    dplyr::select(-term2, -model) %>%
+    as_kable() %>%
+    dim_ci_rows(m4, opacity = 0.25) %>%
+    kableExtra::pack_rows(index = row_grouping(m4$term2), escape = FALSE) %>%
+    footnote() %>%
+    add_style()
+} else {
+  cat("No JN intervals available for Model 4 (no significant interactions or missing bootstrap estimates).")
+}
+```
+
+### Model 9: Gender × SES (Disaggregated)
+
+```{r}
+#| label: jn-model-9-plot
+#| fig-cap: "Johnson–Neyman Regions (Model 9 – Disaggregated Gender × SES)"
+#| fig-subcap: true
+#| layout-ncol: 3
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+m9 <- jn_analysis(model_9) %T>%
+  plot(plot_significant_only = FALSE) %>%
+  summarize_jn_intervals()
+```
+
+```{r}
+#| label: jn-model-9-df
+#| tbl-cap: "Johnson–Neyman Intervals (Model 9)"
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+if (!is.null(m9) && nrow(m9) > 0) {
+  m9 %>%
+    dplyr::select(-term2, -model) %>%
+    as_kable() %>%
+    dim_ci_rows(m9, opacity = 0.25) %>%
+    kableExtra::pack_rows(index = row_grouping(m9$term2), escape = FALSE) %>%
+    footnote() %>%
+    add_style()
+} else {
+  cat("No JN intervals available for Model 9 (no significant interactions or missing bootstrap estimates).")
+}
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+## Output
+
+| File   | Content                                                    |
+| ------ | ---------------------------------------------------------- |
+| none   | step renders inline tables and figures; no files persisted |
+
+**Next:** [Step 12 (Bootstrapped Validation)](/analysis/models/goodness-of-fit/performance-metrics/index.qmd)

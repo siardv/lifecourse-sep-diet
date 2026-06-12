@@ -1,0 +1,1716 @@
+---
+title: "Bootstrapped Validation of Model Performance and Robustness"
+subtitle: "Evaluating Stability Using Resampling-Based Fit Metrics"
+author: "Siard van den Bosch"
+date: 2025-03-06
+date-modified: last-modified
+---
+
+```{=html}
+<script>
+  window.config = {offset: 12};
+</script>
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+|                |         |
+| -------------- | ------- |
+| **Purpose**    | Validate model performance and stability using bootstrap-derived fit metrics |
+| **Inputs**     | `adjusted_data.rds`, `unadjusted_fits.rds`, `adjusted_fits.rds` |
+| **Outputs**    | `gof_metrics.RData`, `gof_model_<k>.RData`, `summary_table_non_bootstrapped.html`, `summary_table_bootstrapped.html` |
+| **Method**     | MM-estimation robust regression; bootstrap resampling; goodness-of-fit metrics (C-index, calibration, weights, errors, R², RMSE, AIC/BIC) |
+| **Requires**   | [Step 7 (Unadjusted Models)](/analysis/models/unadjusted/index.qmd), [Step 8 (Influence Diagnostics)](/analysis/models/assumptions/index.qmd), [Step 9 (Adjusted Models)](/analysis/models/adjusted/index.qmd) |
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+::: {.callout-note icon=false}
+## Rationale
+
+- MM-estimation: combines high breakdown point with efficiency under normal errors [@yohai1987]
+- Robust linear regression: sharpened MM-estimator with adaptive scale [@koller2011]
+- Bootstrap intervals: nonparametric quantification of sampling variability [@efron1993]
+- R² resampling stability: indicates fit consistency across bootstrap samples [@davison1997]
+:::
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+## Load Project Resources
+
+```{r}
+#| label: load-project-resources
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# clear environment
+rm(list = ls(envir = .GlobalEnv), envir = .GlobalEnv)
+invisible(gc(full = TRUE))
+invisible(lapply(grep(":|autoloads|globalenv", search(),
+  invert = TRUE, value = TRUE, ignore.case = TRUE
+), detach, character.only = TRUE, unload = TRUE, force = TRUE))
+
+# source custom functions (consistent with steps 7-11)
+purrr::walk(file.path(here::here("assets", "functions"), paste0(c(
+  "set_globals", "import_pipes", "numeric_df", "add_style",
+  "md_to_html", "rm_dup_cols", "format_coef", "suppress_output",
+  "named_list", "sci_to_tex", "as_kable", "pval_str", "footnote",
+  "beautify_names", "format_p_value", "structure_models",
+  "dim_ci_rows", "row_grouping"
+), ".R")), source)
+
+# set global options and import pipe operators
+set_globals()
+import_pipes()
+
+# global recompute switch
+# TRUE re-runs the heavy steps; FALSE loads cached assets when they exist
+recompute_heavy <- FALSE
+```
+
+## Load Data and Models
+
+```{r}
+#| label: load-data-and-models
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# define input file paths
+adjusted_data_path <- here::here("assets", "data", "saved", "adjusted_data.rds")
+unadjusted_fits_path <- here::here("assets", "models", "unadjusted_fits.rds")
+adjusted_fits_path <- here::here("assets", "models", "adjusted_fits.rds")
+
+# verify input files exist
+required_files <- c(adjusted_data_path, unadjusted_fits_path, adjusted_fits_path)
+missing_files <- required_files[!file.exists(required_files)]
+if (length(missing_files) > 0) {
+  stop("Missing required input files: ", paste(basename(missing_files), collapse = ", "))
+}
+
+# load adjusted dataset from step 8
+source_data <- readRDS(adjusted_data_path)
+
+# load fits and structure into nested list (unadjusted/adjusted × ols/robust)
+unadjusted_fits <- readRDS(unadjusted_fits_path)
+adjusted_fits <- readRDS(adjusted_fits_path)
+model_fits <- structure_models(unadjusted_fits, adjusted_fits)
+
+# extract robust models from adjusted fits and assign custom class for dispatch
+lmrobs <- model_fits$adjusted$robust %>%
+  purrr::map(~ `class<-`(.x, c("model", class(.x))))
+
+# extract model ids
+model_ids <- names(lmrobs) %>%
+  stringr::str_extract("[0-9]+$") %>%
+  as.integer() %>%
+  sort()
+```
+
+```{r}
+#| label: verify-model-structure
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+# verification block to confirm step 7/9 alignment
+n_models <- length(model_ids)
+model_range <- paste0("Models ", min(model_ids), "–", max(model_ids))
+n_obs <- nrow(source_data)
+
+verify_msg <- glue(
+  "<div class='callout-note'>
+<strong>Step 7/9 Model Verification</strong><br><br>
+<strong>Models loaded:</strong> {n_models} models ({model_range})<br>
+<strong>Adjusted fits:</strong> From Step 9 (<code>adjusted_fits.rds</code>)<br>
+<strong>Analysis dataset:</strong> {n_obs} observations (sensitivity sample from Step 8)<br>
+<strong>Model types:</strong> Composite (Models 0–6) and Disaggregated (Models 7–11)
+</div>"
+)
+cat(verify_msg)
+```
+
+## Goodness-of-Fit Analysis
+
+### Evaluating Model Stability
+
+#### Concordance Index (C-index)
+
+```{r}
+#| label: define-c-index-functions
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# generic dispatch method for c-index computation
+c_index <- function(obj, ...) {
+  UseMethod("c_index")
+}
+
+# default method: handles raw bootstrap estimates
+c_index.default <- function(boot_ests, y, x, n_cores = parallel::detectCores() - 1, ...) {
+  .c_index_core(boot_ests, y, x, n_cores)
+}
+
+# model method: extracts components from model object
+c_index.model <- function(obj, n_cores = parallel::detectCores() - 1, ...) {
+  if (!all(c("bootstrap", "fit") %in% names(obj))) {
+    stop("Model must contain 'bootstrap' and 'fit'")
+  }
+  bootstrap_stats <- .c_index_core(
+    obj$bootstrap$ests,
+    obj$fit$model[[1]],
+    obj$fit$x,
+    n_cores
+  )
+  list(bootstrap = bootstrap_stats)
+}
+
+# input validation helper
+.validate_c_index <- function(boot_ests, y, x) {
+  if (!is.matrix(boot_ests)) stop("boot_ests must be a matrix")
+  if (!is.numeric(y)) stop("y must be numeric")
+  if (!is.matrix(x)) stop("x must be a matrix")
+  if (length(y) != nrow(x)) stop("Dimension mismatch: length(y) != nrow(x)")
+}
+
+# core computation: c-index across bootstrap samples
+.c_index_core <- function(boot_ests, y, x, n_cores) {
+  .validate_c_index(boot_ests, y, x)
+  n_cores <- max(1, min(n_cores, parallel::detectCores() - 1))
+
+  # computes concordance for a single coefficient vector
+  calc_c_statistic <- function(coef) {
+    predictions <- x %*% coef
+    n <- length(y)
+    chunk_size <- 1000L
+    concordant_sum <- 0
+    tied_sum <- 0
+    total_pairs <- 0
+
+    # compare pairs in blocks to manage memory
+    for (i in seq(1, n, by = chunk_size)) {
+      end_i <- min(i + chunk_size - 1, n)
+      for (j in seq(i, n, by = chunk_size)) {
+        end_j <- min(j + chunk_size - 1, n)
+        obs_diff <- outer(y[i:end_i], y[j:end_j], "-")
+        pred_diff <- outer(predictions[i:end_i], predictions[j:end_j], "-")
+        keep <- if (i == j) upper.tri(obs_diff) else array(TRUE, dim(obs_diff))
+        obs_diff_upper <- obs_diff[keep]
+        pred_diff_upper <- pred_diff[keep]
+        concordant_pairs <- obs_diff_upper != 0
+        concordant_sum <- concordant_sum +
+          sum(sign(obs_diff_upper[concordant_pairs]) == sign(pred_diff_upper[concordant_pairs]))
+        tied_sum <- tied_sum + sum(pred_diff_upper[concordant_pairs] == 0)
+        total_pairs <- total_pairs + sum(concordant_pairs)
+      }
+    }
+
+    if (total_pairs == 0) {
+      return(NA_real_)
+    }
+    (concordant_sum + 0.5 * tied_sum) / total_pairs
+  }
+
+  # windows-compatible parallel execution via clusters
+  parallel_process <- function() {
+    cluster <- parallel::makeCluster(n_cores)
+    on.exit(parallel::stopCluster(cluster))
+    parallel::clusterExport(
+      cluster,
+      c("boot_ests", "y", "x", "calc_c_statistic"),
+      envir = environment()
+    )
+    pbapply::pbsapply(
+      seq_len(nrow(boot_ests)),
+      function(i) calc_c_statistic(boot_ests[i, ]),
+      cl = cluster
+    )
+  }
+
+  # os-specific parallel dispatch
+  c_values <- if (.Platform$OS.type == "windows") {
+    tryCatch(parallel_process(), error = function(e) stop("Parallel error: ", e$message))
+  } else {
+    if (!requireNamespace("pbmcapply", quietly = TRUE)) {
+      stop("Package 'pbmcapply' is required for parallel processing.")
+    }
+    unlist(pbmcapply::pbmclapply(
+      seq_len(nrow(boot_ests)),
+      function(i) calc_c_statistic(boot_ests[i, ]),
+      mc.cores = n_cores
+    ))
+  }
+
+  # return summary statistics
+  list(
+    mean = mean(c_values, na.rm = TRUE),
+    sd = sd(c_values, na.rm = TRUE),
+    ci = stats::quantile(c_values, c(0.025, 0.975), na.rm = TRUE),
+    values = c_values
+  )
+}
+```
+
+#### Calibration Analysis
+
+```{r}
+#| label: define-calibration-functions
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# generic dispatch for calibration statistics
+calibration_stats <- function(obj, ...) {
+  UseMethod("calibration_stats")
+}
+
+# default method: error for unsupported types
+calibration_stats.default <- function(obj, ...) {
+  stop("Unsupported object type")
+}
+
+# input validation helper
+.validate_calibration_data <- function(boot_coefs, obs_vals, x) {
+  stopifnot(
+    is.matrix(boot_coefs),
+    is.numeric(obs_vals),
+    is.matrix(x),
+    length(obs_vals) == nrow(x),
+    !anyNA(c(boot_coefs, obs_vals, x))
+  )
+}
+
+# core computation: calibration metrics across bootstrap samples
+.calibration_core <- function(boot_coefs, obs_vals, x) {
+  .validate_calibration_data(boot_coefs, obs_vals, x)
+
+  compute_stats <- function(coef) {
+    predictions <- x %*% coef
+    fit <- lm(obs_vals ~ predictions)
+    coefs <- coef(fit)
+    c(
+      slope = coefs[2],
+      intercept = coefs[1],
+      r2 = summary(fit)$r.squared,
+      citl = mean(obs_vals - predictions),
+      e_max = max(abs(predictions - obs_vals))
+    )
+  }
+
+  stats_matrix <- t(apply(boot_coefs, 1, compute_stats))
+  colnames(stats_matrix) <- c("slope", "intercept", "r2", "citl", "e_max")
+
+  summary_df <- apply(stats_matrix, 2, function(x) {
+    c(
+      mean = mean(x, na.rm = TRUE),
+      sd = sd(x, na.rm = TRUE),
+      stats::quantile(x, c(0.025, 0.5, 0.975), na.rm = TRUE)
+    )
+  })
+  as.data.frame(summary_df)
+}
+
+# model method: compute calibration for original fit and bootstrap samples
+calibration_stats.model <- function(obj, ...) {
+  predictions <- obj$fit$fitted.values
+  obs_vals <- obj$fit$model[[1]]
+  fit <- lm(obs_vals ~ predictions)
+  coefs <- coef(fit)
+
+  original_stats <- list(
+    slope = coefs[2],
+    intercept = coefs[1],
+    r2 = summary(fit)$r.squared,
+    citl = mean(obs_vals - predictions),
+    e_max_fitted = max(abs(predictions - obs_vals))
+  )
+
+  bootstrap_stats <- .calibration_core(obj$bootstrap$ests, obs_vals, obj$fit$x)
+
+  list(original = original_stats, bootstrap = bootstrap_stats)
+}
+```
+
+#### Weight Distribution Analysis
+
+```{r}
+#| label: define-weight-metrics-functions
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# generic dispatch for weight metrics
+wt_metrics <- function(obj, ...) {
+  UseMethod("wt_metrics")
+}
+
+# default method: error for unsupported types
+wt_metrics.default <- function(obj, ...) {
+  stop("Object type '", class(obj)[1], "' not supported", call. = FALSE)
+}
+
+# model method: extract and summarize robust weights
+wt_metrics.model <- function(obj, boot_samples = 1000, ...) {
+  robust_weights <- obj$fit$rweights
+  stopifnot(is.numeric(robust_weights))
+
+  # compute histogram (Freedman-Diaconis breaks) and density
+  hist_obj <- hist(robust_weights, plot = FALSE, breaks = "FD")
+  density_obj <- density(robust_weights)
+
+  # bootstrap confidence interval for the mean
+  boot_means <- replicate(boot_samples, mean(sample(robust_weights, replace = TRUE)))
+  mean_ci <- stats::quantile(boot_means, c(0.025, 0.975))
+
+  stats <- list(
+    n = length(robust_weights),
+    mean = mean(robust_weights),
+    median = median(robust_weights),
+    sd = sd(robust_weights),
+    min = min(robust_weights),
+    max = max(robust_weights),
+    mean_ci = mean_ci,
+    prop_zero = mean(robust_weights == 0),
+    prop_small = mean(robust_weights < 0.1)
+  )
+
+  structure(
+    list(
+      values = robust_weights,
+      histogram = hist_obj,
+      density = density_obj,
+      stats = stats
+    ),
+    class = "wt_metrics"
+  )
+}
+```
+
+```{r}
+#| label: define-weight-plot-method
+#| message: false
+#| warning: false
+#| code-fold: true
+#| column: body-outset-right
+
+# plot method for wt_metrics objects
+plot.wt_metrics <- function(wt_data) {
+  # color scheme
+  viridis_colors <- viridis::viridis(4)
+  fill_color <- viridis_colors[3]
+  density_color <- viridis_colors[1]
+  mean_color <- "#D55E00"
+  ci_color <- "#0072B2"
+
+  plot_df <- data.frame(weights = wt_data$values)
+
+  # helper to create weight distribution plot
+  create_weight_plot <- function(title, y_label, ylim = NULL) {
+    bin_width <- diff(wt_data$histogram$breaks)[1]
+    centered_breaks <- seq(
+      min(wt_data$histogram$breaks) - bin_width / 2,
+      max(wt_data$histogram$breaks) + bin_width / 2,
+      bin_width
+    )
+
+    ggplot2::ggplot(plot_df, ggplot2::aes(x = weights)) +
+      ggplot2::geom_histogram(
+        ggplot2::aes(y = ggplot2::after_stat(density)),
+        breaks = centered_breaks,
+        fill = fill_color, color = "white", alpha = 0.6,
+        boundary = min(centered_breaks), closed = "left"
+      ) +
+      ggplot2::geom_line(
+        data = data.frame(x = wt_data$density$x, y = wt_data$density$y),
+        ggplot2::aes(x = x, y = y),
+        color = density_color, linewidth = 0.8
+      ) +
+      ggplot2::geom_vline(
+        xintercept = wt_data$stats$mean_ci,
+        color = ci_color, linewidth = 0.4, linetype = "dashed", alpha = 0.8
+      ) +
+      ggplot2::geom_vline(
+        xintercept = wt_data$stats$mean,
+        color = mean_color, linewidth = 0.6, alpha = 1
+      ) +
+      ggplot2::labs(title = title, x = "Weights", y = y_label) +
+      ggplot2::coord_cartesian(ylim = ylim) +
+      ggplot2::theme(
+        plot.title = ggplot2::element_text(size = 14),
+        plot.subtitle = ggplot2::element_text(size = 10),
+        axis.title = ggplot2::element_text(size = 12),
+        axis.text = ggplot2::element_text(size = 10)
+      )
+  }
+
+  # full range plot with summary subtitle
+  full_range_plot <- create_weight_plot("Weight Distribution (Full Range)", "Density") +
+    ggplot2::labs(subtitle = sprintf(
+      "95%% CI for Mean: [%.2f, %.2f]\nProp Zero: %.2f, Prop < 0.1: %.2f",
+      wt_data$stats$mean_ci["2.5%"],
+      wt_data$stats$mean_ci["97.5%"],
+      wt_data$stats$prop_zero,
+      wt_data$stats$prop_small
+    ))
+
+  # zoomed-in plot
+  density_y <- wt_data$density$y
+  iqr_density <- IQR(density_y)
+  zoom_level <- stats::quantile(density_y, 0.75) + 1.5 * iqr_density
+
+  zoomed_in_plot <- create_weight_plot(
+    "Weight Distribution (Zoomed In)", "Density (Zoomed)", c(0, zoom_level)
+  ) +
+    ggplot2::scale_x_continuous(breaks = scales::breaks_pretty(n = 10))
+
+  patchwork::wrap_plots(full_range_plot, zoomed_in_plot, ncol = 1, heights = c(2, 1))
+}
+```
+
+#### Bootstrap-Based Error Metrics
+
+```{r}
+#| label: define-boot-error-functions
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# generic dispatch for bootstrap errors
+boot_errors <- function(obj, ...) {
+  UseMethod("boot_errors")
+}
+
+boot_errors.default <- function(obj, ...) {
+  stop("Unsupported type for boot_errors")
+}
+
+# input validation
+.validate_boot_error_input <- function(true_coefs, boot_ests) {
+  if (!is.matrix(boot_ests) && !is.data.frame(boot_ests)) {
+    stop("boot_ests must be a matrix or data.frame")
+  }
+  if (is.null(colnames(boot_ests)) || is.null(names(true_coefs))) {
+    stop("Column names for boot_ests and names for true_coefs are required")
+  }
+}
+
+# core computation
+.boot_error_core <- function(true_coefs, boot_ests) {
+  stopifnot(ncol(boot_ests) == length(true_coefs))
+
+  errors <- abs(sweep(boot_ests, 2, true_coefs, "-"))
+  percent_errors <- 100 * sweep(errors, 2, abs(true_coefs), "/")
+
+  data.frame(
+    coefficient = names(true_coefs),
+    mae = colMeans(errors, na.rm = TRUE),
+    medae = apply(errors, 2, median, na.rm = TRUE),
+    mape = colMeans(percent_errors, na.rm = TRUE)
+  )
+}
+
+boot_errors.numeric <- function(true_coefs, boot_ests, ...) {
+  .boot_error_core(true_coefs, boot_ests, ...)
+}
+
+boot_errors.model <- function(obj, ...) {
+  list(bootstrap = .boot_error_core(obj$fit$coef, obj$bootstrap$ests, ...))
+}
+```
+
+#### Bootstrap R² and Adjusted R²
+
+```{r}
+#| label: define-boot-r2-functions
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# generic dispatch for R-squared metrics
+boot_r2 <- function(obj, ...) {
+  UseMethod("boot_r2")
+}
+
+boot_r2.default <- function(obj, ...) {
+  stop("Unsupported type for boot_r2")
+}
+
+# core computation
+.boot_r2_core <- function(observed_y, predicted_y_boot, num_predictors) {
+  sse <- colSums((observed_y - predicted_y_boot)^2, na.rm = TRUE)
+  tss <- sum((observed_y - mean(observed_y, na.rm = TRUE))^2, na.rm = TRUE)
+  r2_values <- 1 - sse / tss
+  n <- length(observed_y)
+  adjusted_r2_values <- 1 - (1 - r2_values) * (n - 1) / (n - num_predictors)
+
+  list(
+    raw = data.frame(r2 = r2_values, adj_r2 = adjusted_r2_values),
+    summary = data.frame(
+      metric = c("R2", "Adj R2"),
+      mean = c(mean(r2_values, na.rm = TRUE), mean(adjusted_r2_values, na.rm = TRUE)),
+      sd = c(sd(r2_values, na.rm = TRUE), sd(adjusted_r2_values, na.rm = TRUE)),
+      ci_lower = c(
+        stats::quantile(r2_values, 0.025, na.rm = TRUE),
+        stats::quantile(adjusted_r2_values, 0.025, na.rm = TRUE)
+      ),
+      ci_upper = c(
+        stats::quantile(r2_values, 0.975, na.rm = TRUE),
+        stats::quantile(adjusted_r2_values, 0.975, na.rm = TRUE)
+      )
+    )
+  )
+}
+
+boot_r2.numeric <- function(y, y_hat, p, ...) {
+  .boot_r2_core(y, y_hat, p)
+}
+
+boot_r2.model <- function(obj, ...) {
+  observed_y <- obj$fit$model[[1]]
+  predicted_y <- obj$fit$fitted.values
+  sse <- sum((observed_y - predicted_y)^2)
+  tss <- sum((observed_y - mean(observed_y))^2)
+  r2 <- 1 - sse / tss
+  n <- length(observed_y)
+  p <- length(obj$fit$coef)
+  adj_r2 <- 1 - (1 - r2) * (n - 1) / (n - p)
+
+  original_stats <- list(r2 = r2, adj_r2 = adj_r2)
+
+  predicted_y_boot <- obj$fit$x %*% t(obj$bootstrap$ests)
+  bootstrap_stats <- .boot_r2_core(observed_y, predicted_y_boot, p)
+
+  list(original = original_stats, bootstrap = bootstrap_stats)
+}
+```
+
+#### Bootstrap RMSE
+
+```{r}
+#| label: define-boot-rmse-functions
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# generic dispatch
+boot_rmse <- function(obj, ...) {
+  UseMethod("boot_rmse")
+}
+
+boot_rmse.default <- function(obj, ...) {
+  stop("Unsupported type for boot_rmse")
+}
+
+.validate_boot_rmse_input <- function(true_coefs, boot_ests) {
+  if (length(true_coefs) != ncol(boot_ests)) {
+    stop("Number of coefficients in true_coefs and boot_ests must match")
+  }
+}
+
+.boot_rmse_core <- function(true_coefs, boot_ests) {
+  .validate_boot_rmse_input(true_coefs, boot_ests)
+  coefficient_errors <- sweep(boot_ests, 2, true_coefs, "-")
+  rmse_values <- sqrt(rowMeans(coefficient_errors^2, na.rm = TRUE))
+  data.frame(
+    mean_coef_rmse = mean(rmse_values, na.rm = TRUE),
+    sd_coef_rmse = sd(rmse_values, na.rm = TRUE)
+  )
+}
+
+boot_rmse.direct <- function(coefs, boot_ests, ...) {
+  .boot_rmse_core(coefs, boot_ests)
+}
+
+boot_rmse.model <- function(obj, ...) {
+  list(bootstrap = .boot_rmse_core(obj$fit$coef, obj$bootstrap$ests))
+}
+```
+
+#### Bootstrap AIC and BIC
+
+```{r}
+#| label: define-boot-gof-functions
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# generic dispatch
+boot_gof <- function(obj, ...) {
+  UseMethod("boot_gof")
+}
+
+boot_gof.default <- function(obj, ...) {
+  stop("Unsupported type for boot_gof")
+}
+
+.boot_gof_core <- function(boot_coefs, x_matrix, y_values, metrics = c("aic", "bic")) {
+  predictions <- boot_coefs %*% t(x_matrix)
+  residual_sum_squares <- rowSums((y_values - t(predictions))^2)
+  n <- length(y_values)
+  p <- ncol(boot_coefs)
+
+  results <- data.frame(
+    aic = n * log(residual_sum_squares / n) + 2 * p,
+    bic = n * log(residual_sum_squares / n) + log(n) * p
+  )[metrics]
+
+  list(
+    raw = results,
+    summary = data.frame(
+      metric = toupper(metrics),
+      mean = colMeans(results, na.rm = TRUE),
+      sd = sapply(results, sd, na.rm = TRUE)
+    )
+  )
+}
+
+boot_gof.direct <- function(boot_coefs, x, y, ...) {
+  .boot_gof_core(boot_coefs, x, y, ...)
+}
+
+boot_gof.model <- function(obj, ...) {
+  residuals <- obj$fit$model[[1]] - obj$fit$fitted.values
+  rss <- sum(residuals^2)
+  n <- length(obj$fit$model[[1]])
+  p <- length(obj$fit$coef)
+
+  original_stats <- list(
+    aic = n * log(rss / n) + 2 * p,
+    bic = n * log(rss / n) + log(n) * p
+  )
+
+  bootstrap_stats <- .boot_gof_core(obj$bootstrap$ests, obj$fit$x, obj$fit$model[[1]])
+
+  list(original = original_stats, bootstrap = bootstrap_stats)
+}
+```
+
+### Comparing Model Performance
+
+```{r}
+#| label: define-sanitize-model-0
+#| message: false
+#| warning: false
+#| code-fold: true
+#| column: body-outset-right
+
+# set NA values for metrics not applicable to null (intercept-only) model
+sanitize_model_0_metrics <- function(gof_metrics) {
+  gof_metrics$model_0$calibration_stats$original$r2 <- NA
+  gof_metrics$model_0$boot_r2$bootstrap$raw$r2 <- NA
+  gof_metrics$model_0$boot_r2$bootstrap$raw$adj_r2 <- NA
+  gof_metrics$model_0$boot_r2$bootstrap$summary[1:2, 2:5] <- NA
+  gof_metrics$model_0$c_index$bootstrap$mean <- NA
+  gof_metrics$model_0$c_index$bootstrap$sd <- NA
+  gof_metrics$model_0$c_index$bootstrap$ci <- NA
+  gof_metrics$model_0$c_index$bootstrap$values <- NA
+  gof_metrics$model_0$boot_gof$bootstrap$raw$aic <- NA
+  gof_metrics$model_0$boot_gof$bootstrap$raw$bic <- NA
+  gof_metrics$model_0$boot_gof$bootstrap$summary[1:2, 2:3] <- NA
+  gof_metrics
+}
+```
+
+- *in*: `lmrobs`
+- *out*: `gof_metrics`, `gof_metrics.RData`, `gof_model_<k>.RData`
+- *rule*: load cached metrics when `gof_metrics.RData` exists and `recompute_heavy` is FALSE; else recompute, save aggregate and per-model RData
+
+```{r}
+#| label: compute-all-gof-metrics
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# paths for model data and metrics storage
+rdata_path <- here::here("assets", "models")
+gof_metrics_path <- file.path(rdata_path, "gof_metrics.RData")
+
+# load precomputed metrics if available, otherwise compute
+if (!recompute_heavy && file.exists(gof_metrics_path)) {
+  load(gof_metrics_path)
+} else {
+  # metric functions to apply to each model
+  metric_fn_names <- c(
+    "c_index", "calibration_stats", "wt_metrics",
+    "boot_errors", "boot_r2", "boot_rmse", "boot_gof"
+  )
+  metric_functions <- setNames(lapply(metric_fn_names, get), metric_fn_names)
+
+  # safe wrapper for metric computation
+  safe_calculate <- function(fun, name, model) {
+    tryCatch(
+      fun(model),
+      error = function(e) {
+        warning("Error in ", name, ": ", conditionMessage(e))
+        NULL
+      }
+    )
+  }
+
+  gof_metrics <- purrr::imap(lmrobs, function(model, model_name) {
+    tryCatch(
+      {
+        metrics <- purrr::imap(metric_functions, ~ safe_calculate(.x, .y, model))
+
+        # save per-model data for debugging
+        model_data <- list(model = model, metrics = metrics)
+        model_idx <- as.integer(gsub("model_", "", model_name))
+        save(model_data, file = glue("{rdata_path}/gof_model_{model_idx}.RData"))
+
+        metrics
+      },
+      error = function(e) {
+        warning("Error processing ", model_name, ": ", conditionMessage(e))
+        NULL
+      }
+    )
+  })
+
+  # persist aggregated metrics
+  save(gof_metrics, file = gof_metrics_path)
+}
+
+# sanitize null model metrics (applies to cached and freshly computed objects)
+gof_metrics <- sanitize_model_0_metrics(gof_metrics)
+```
+
+#### Model Comparisons (Non-Bootstrapped)
+
+```{r}
+#| label: define-extract-gof-function
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# extract gof metrics from a single model fit
+extract_gof <- function(model_fit, bootstrap = FALSE, digits = 3, linebreak = FALSE) {
+  if (!is.list(model_fit)) stop("model_fit must be a list")
+  required_keys <- c("boot_r2", "boot_gof")
+  if (!all(required_keys %in% names(model_fit))) {
+    stop("model_fit must contain 'boot_r2' and 'boot_gof'")
+  }
+
+  if (!bootstrap) {
+    # validate original metrics structure
+    if (!all(c("original") %in% names(model_fit$boot_r2)) ||
+      !all(c("r2", "adj_r2") %in% names(model_fit$boot_r2$original))) {
+      stop("model_fit$boot_r2 must contain 'original' with 'r2' and 'adj_r2'")
+    }
+    if (!all(c("original") %in% names(model_fit$boot_gof)) ||
+      !all(c("aic", "bic") %in% names(model_fit$boot_gof$original))) {
+      stop("model_fit$boot_gof must contain 'original' with 'aic' and 'bic'")
+    }
+
+    estimates <- c(
+      R2 = model_fit$boot_r2$original$r2,
+      Adj_R2 = model_fit$boot_r2$original$adj_r2,
+      AIC = model_fit$boot_gof$original$aic,
+      BIC = model_fit$boot_gof$original$bic
+    )
+
+    return(purrr::map(
+      estimates, format_coef,
+      pval = NA, se = NULL, digits = digits, linebreak = linebreak
+    ))
+  }
+
+  # validate bootstrap metrics structure
+  if (!all(c("bootstrap") %in% names(model_fit$boot_r2)) ||
+    !all(c("summary") %in% names(model_fit$boot_r2$bootstrap)) ||
+    !is.data.frame(model_fit$boot_r2$bootstrap$summary)) {
+    stop("model_fit$boot_r2 must contain 'bootstrap$summary' as a data frame")
+  }
+  if (!all(c("bootstrap") %in% names(model_fit$boot_gof)) ||
+    !all(c("summary", "raw") %in% names(model_fit$boot_gof$bootstrap)) ||
+    !is.data.frame(model_fit$boot_gof$bootstrap$summary)) {
+    stop("model_fit$boot_gof must contain 'bootstrap$summary' and 'bootstrap$raw'")
+  }
+
+  r2_summary <- model_fit$boot_r2$bootstrap$summary
+  gof_summary <- model_fit$boot_gof$bootstrap$summary
+
+  # validate required metrics present
+  required_metrics <- list(r2_summary = c("R2", "Adj R2"), gof_summary = c("AIC", "BIC"))
+  purrr::walk2(
+    required_metrics, list(r2_summary, gof_summary),
+    ~ if (!all(.x %in% .y$metric)) stop(paste(.x, "must be present"))
+  )
+
+  means <- c(
+    R2 = r2_summary$mean[r2_summary$metric == "R2"],
+    Adj_R2 = r2_summary$mean[r2_summary$metric == "Adj R2"]
+  )
+  sds <- c(
+    R2 = r2_summary$sd[r2_summary$metric == "R2"],
+    Adj_R2 = r2_summary$sd[r2_summary$metric == "Adj R2"]
+  )
+  r2_cells <- purrr::map2(
+    means, sds, format_coef,
+    pval = NA, digits = digits, linebreak = linebreak
+  )
+
+  # aic/bic: heavy-tailed bootstrap draws make mean/sd uninformative, so
+  # report the median with the 2.5-97.5 percentile interval of raw draws
+  raw_gof <- model_fit$boot_gof$bootstrap$raw
+  fmt_median_ci <- function(x) {
+    x <- x[is.finite(x)]
+    if (length(x) == 0) {
+      return(format_coef(
+        NA_real_,
+        pval = NA, se = NULL, digits = digits, linebreak = linebreak
+      ))
+    }
+    q <- stats::quantile(x, c(0.5, 0.025, 0.975))
+    sprintf(
+      paste0("%.", digits, "f [%.", digits, "f, %.", digits, "f]"),
+      q[1], q[2], q[3]
+    )
+  }
+  gof_cells <- list(
+    AIC = fmt_median_ci(raw_gof$aic),
+    BIC = fmt_median_ci(raw_gof$bic)
+  )
+
+  c(r2_cells, gof_cells)
+}
+
+# extract gof for all models
+all_model_gof <- function(x, ...) {
+  lapply(x, extract_gof, ...) %>%
+    purrr::transpose() %>%
+    purrr::map(~ unlist(.x, use.names = FALSE)) %>%
+    setNames(beautify_names(names(.)))
+}
+```
+
+```{r}
+#| label: define-table-metadata
+#| include: false
+#| column: body-outset-right
+
+# centralized table metadata definitions
+table_meta <- list(
+  non_bootstrap = list(
+    footnote = glue(
+      "Coefficients, standard errors, and p-values from robust linear regression (MM-estimation). ",
+      "Goodness-of-fit metrics (R², Adjusted R², AIC, BIC) calculated from original fits. ",
+      "Significance: {pval_str(html = FALSE, concatenate = TRUE, use_dot_for_0.1 = TRUE)}."
+    )
+  ),
+  bootstrap = list(
+    footnote = glue(
+      "Bootstrap estimates (1000 samples): coefficients = bootstrap means, ",
+      "SEs = bootstrap SDs, p-values from bootstrap distributions. ",
+      "R² metrics = bootstrap mean (SD); AIC/BIC = bootstrap median ",
+      "[2.5%, 97.5% percentiles], robust to degenerate resamples. ",
+      "Significance: {pval_str(html = FALSE, concatenate = TRUE, use_dot_for_0.1 = TRUE)}. ",
+      "Model 0 (intercept-only): certain metrics NA."
+    )
+  ),
+  detailed_gof = list(
+    footnote = glue(
+      "Values = bootstrap means (± SD where shown) with 95% bootstrap percentile CIs. ",
+      "C-index = discrimination. Calibration: slope (β₁), intercept (β₀), R², CITL, E-max. ",
+      "Weight statistics describe observation influence. En-dashes denote ranges."
+    )
+  ),
+  per_model = list(
+    col_names = c("Metric", "Estimate", "SD", "CI$_{\\text{lower}}$", "CI$_{\\text{upper}}$"),
+    footnote = "Bootstrap metrics: mean, SD, percentile CIs (2.5%, 97.5%). C-index = discrimination; calibration metrics assess prediction accuracy; error metrics (MAE, MedAE, MAPE, RMSE) quantify prediction error; AIC/BIC evaluate parsimony. AIC/BIC are reported as bootstrap medians with percentile intervals; their bootstrap means and SDs are dominated by degenerate resamples."
+  )
+)
+```
+
+```{r}
+#| label: generate-non-bootstrapped-table
+#| tbl-cap: "Model Summary Statistics for Robust Linear Regression Models (Non-Bootstrapped)"
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: page-right
+
+models_dir <- here::here("assets", "models")
+lmrob_fits <- purrr::map(lmrobs, ~ .x$fit)
+
+# extract all unique coefficient names across models
+all_coef_names <- lmrob_fits %>%
+  purrr::map(~ names(coefficients(.x))) %>%
+  purrr::reduce(union)
+
+# ensure intercept first; keep texreg's first-appearance order for the rest
+intercept_idx <- which(all_coef_names == "(Intercept)")
+other_names <- all_coef_names[-intercept_idx]
+coef_names <- c("(Intercept)", other_names)
+coef_names[-1] <- beautify_names(coef_names[-1], abbreviate = TRUE, as_HTML = TRUE)
+
+model_names <- gsub("model_", "", names(lmrob_fits))
+gof_rows_non_bootstrap <- all_model_gof(gof_metrics, bootstrap = FALSE)
+
+non_boot_table_path <- file.path(models_dir, "summary_table_non_bootstrapped.html")
+if (recompute_heavy || !file.exists(non_boot_table_path)) {
+  texreg::htmlreg(
+    lmrob_fits,
+    file = non_boot_table_path,
+    inline.css = TRUE,
+    include.gof = FALSE,
+    digits = 3,
+    single.row = TRUE,
+    custom.coef.names = coef_names,
+    stars = c(0.001, 0.01, 0.05, 0.1),
+    custom.model.names = model_names,
+    custom.note = md_to_html(table_meta$non_bootstrap$footnote),
+    caption = NULL,
+    custom.gof.rows = gof_rows_non_bootstrap,
+    leading.zero = FALSE
+  )
+}
+
+htmltools::includeHTML(non_boot_table_path)
+```
+
+#### Model Comparisons (Bootstrapped)
+
+```{r}
+#| label: prepare-bootstrap-results
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+gof_rows_bootstrap <- all_model_gof(gof_metrics, bootstrap = TRUE, linebreak = TRUE)
+
+bootstrap_results <- purrr::map(lmrobs, ~ {
+  .x$bootstrap %$%
+    list(
+      coefs = .$coefs,
+      std_errors = .$std_errors,
+      p_value = .$p_value,
+      ci_low = .$conf_int[, 1],
+      ci_high = .$conf_int[, 2]
+    )
+}) %>%
+  purrr::map(~ {
+    names(.x$coefs) %<>%
+      beautify_names(abbreviate = TRUE) %>%
+      md_to_html()
+    .x
+  })
+```
+
+```{r}
+#| label: generate-bootstrapped-table
+#| tbl-cap: "Model Summary Statistics for Robust Linear Regression Models (Bootstrapped)"
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: page-right
+
+boot_table_path <- file.path(models_dir, "summary_table_bootstrapped.html")
+if (recompute_heavy || !file.exists(boot_table_path)) {
+  bootstrap_results %>%
+    purrr::map(~ texreg::createTexreg(
+      coef.names = names(.x$coefs),
+      coef = .x$coefs,
+      se = .x$std_errors,
+      pvalues = .x$p_value
+    )) %>%
+    texreg::htmlreg(
+      file = boot_table_path,
+      inline.css = TRUE,
+      include.gof = FALSE,
+      single.row = TRUE,
+      custom.coef.names = coef_names,
+      stars = c(0.001, 0.01, 0.05, 0.1),
+      custom.model.names = model_names,
+      custom.note = md_to_html(table_meta$bootstrap$footnote),
+      custom.gof.rows = gof_rows_bootstrap,
+      caption = NULL,
+      leading.zero = FALSE
+    )
+}
+
+htmltools::includeHTML(boot_table_path)
+```
+
+### Detailed Goodness-of-Fit Metrics
+
+```{r}
+#| label: define-combine-gof-metrics-summary
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# combine gof metrics for summary table across models
+combine_gof_metrics_summary <- function(gof) {
+  # detect null model
+  is_null_model <- !is.null(gof$c_index$bootstrap$values) &&
+    all(is.na(gof$c_index$bootstrap$values))
+
+  # c-index
+  cindex_df <- if (!is.null(gof$c_index$bootstrap$mean)) {
+    data.frame(
+      Metric = "C-index",
+      Value = gof$c_index$bootstrap$mean,
+      SD = gof$c_index$bootstrap$sd,
+      ci_lower = unname(gof$c_index$bootstrap$ci[1]),
+      ci_upper = unname(gof$c_index$bootstrap$ci[2]),
+      stringsAsFactors = FALSE
+    )
+  } else {
+    data.frame(
+      Metric = "C-index",
+      Value = NA_real_, SD = NA_real_, ci_lower = NA_real_, ci_upper = NA_real_,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  # calibration metrics
+  calib_original <- gof$calibration_stats$original
+  calib_boot <- gof$calibration_stats$bootstrap
+
+  metrics_map <- list(
+    slope = "Calibration Slope",
+    intercept = "Calibration Intercept",
+    r2 = "Calibration R²",
+    citl = "Calibration CITL",
+    e_max = "Calibration E-max"
+  )
+
+  get_orig_val <- function(key) {
+    orig_key <- if (key == "e_max") "e_max_fitted" else key
+    if (!is.null(calib_original[[orig_key]])) calib_original[[orig_key]] else NA_real_
+  }
+
+  # value = bootstrap mean, consistent with the per-model tables and the
+  # bootstrap percentile intervals; falls back to the original-fit value
+  cal_vals <- sapply(names(metrics_map), function(m) {
+    if (!is.null(calib_boot) && m %in% colnames(calib_boot)) {
+      as.numeric(calib_boot["mean", m])
+    } else {
+      get_orig_val(m)
+    }
+  })
+
+  cal_ci_lower <- sapply(names(metrics_map), function(m) {
+    if (!is.null(calib_boot) && m %in% colnames(calib_boot)) {
+      as.numeric(calib_boot["2.5%", m])
+    } else {
+      NA_real_
+    }
+  })
+
+  cal_ci_upper <- sapply(names(metrics_map), function(m) {
+    if (!is.null(calib_boot) && m %in% colnames(calib_boot)) {
+      as.numeric(calib_boot["97.5%", m])
+    } else {
+      NA_real_
+    }
+  })
+
+  cal_dfs <- data.frame(
+    Metric = unlist(metrics_map),
+    Value = as.numeric(cal_vals),
+    SD = NA_real_,
+    ci_lower = as.numeric(cal_ci_lower),
+    ci_upper = as.numeric(cal_ci_upper),
+    stringsAsFactors = FALSE,
+    row.names = NULL
+  )
+
+  # weight metrics
+  wt_dfs <- if (!is.null(gof$wt_metrics)) {
+    data.frame(
+      Metric = c("Weight n", "Weight Distribution"),
+      Value = c(gof$wt_metrics$stats$n, gof$wt_metrics$stats$mean),
+      SD = c(NA, gof$wt_metrics$stats$sd),
+      ci_lower = c(NA, gof$wt_metrics$stats$mean_ci["2.5%"]),
+      ci_upper = c(NA, gof$wt_metrics$stats$mean_ci["97.5%"]),
+      stringsAsFactors = FALSE
+    )
+  } else {
+    data.frame(
+      Metric = c("Weight n", "Weight Distribution"),
+      Value = NA_real_, SD = NA_real_, ci_lower = NA_real_, ci_upper = NA_real_,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  # null model adjustments
+  if (is_null_model) {
+    cindex_df[c("Value", "SD", "ci_lower", "ci_upper")] <- NA
+    blank_metrics <- c("Calibration Slope", "Calibration R²", "Calibration E-max", "Calibration Intercept")
+    cal_dfs[cal_dfs$Metric %in% blank_metrics, c("Value", "ci_lower", "ci_upper")] <- NA
+  }
+
+  combined_df <- dplyr::bind_rows(cindex_df, cal_dfs, wt_dfs)
+
+  # format CI and final output
+  combined_df <- combined_df %>%
+    dplyr::mutate(
+      CI = purrr::map2_chr(ci_lower, ci_upper, function(l, u) {
+        if (is.na(l) || is.na(u)) {
+          return(NA_character_)
+        }
+        sprintf("%.3f–%.3f", l, u)
+      })
+    ) %>%
+    dplyr::mutate(
+      Formatted = purrr::pmap_chr(
+        list(Value, SD, CI),
+        function(v, s, c) {
+          if (exists("format_gof_html")) {
+            format_gof_html(v, s, c, digs = 3)
+          } else {
+            val_str <- if (is.na(v)) "–" else sprintf("%.3f", v)
+            ci_str <- if (is.na(c)) "" else paste0(" (", c, ")")
+            paste0(val_str, ci_str)
+          }
+        }
+      )
+    ) %>%
+    dplyr::select(Metric, Formatted)
+
+  combined_df
+}
+```
+
+```{r}
+#| label: define-format-gof-html
+#| message: false
+#| warning: false
+#| code-fold: true
+#| column: body-outset-right
+
+# format gof value with optional sd and ci for html display
+format_gof_html <- function(val, sd = NA, ci = NA, digs = 3) {
+  fmt_num <- function(num, d) sprintf("%.*f", d, round(num, d))
+
+  if (is.na(val)) {
+    return("–")
+  }
+
+  val_str <- paste0(
+    if (val >= 0 && val < 10) "<span style='display:inline-block;width:4px'></span>" else "",
+    fmt_num(val, digs)
+  )
+  sd_str <- if (!is.na(sd)) {
+    sprintf("<br><span style='font-size:0.8em'>(±%s)</span>", fmt_num(sd, digs))
+  } else {
+    ""
+  }
+  ci_str <- if (!is.na(ci)) {
+    sprintf("<br><span style='font-size:0.8em; white-space: nowrap;'>[%s]</span>", ci)
+  } else {
+    ""
+  }
+
+  paste0(val_str, sd_str, ci_str)
+}
+```
+
+```{r}
+#| label: define-generate-gof-table
+#| message: false
+#| warning: false
+#| code-fold: true
+#| column: body-outset-right
+
+# generate wide-format gof table across all models
+generate_gof_table <- function(gof_metrics) {
+  table_df <- purrr::map_dfc(gof_metrics, ~ combine_gof_metrics_summary(.x)$Formatted)
+  metrics <- combine_gof_metrics_summary(gof_metrics[[1]])$Metric
+  table_df <- cbind(Metric = metrics, table_df)
+  colnames(table_df)[-1] <- paste("Model", seq_along(gof_metrics) - 1)
+  table_df
+}
+```
+
+```{r}
+#| label: generate-gof-summary-table
+#| tbl-cap: "Summary of Goodness-of-Fit Metrics Across Models"
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: page-right
+
+col_names <- c("Metric", glue("Model {0:11}"))
+footnote_text <- table_meta$detailed_gof$footnote
+
+generate_gof_table(gof_metrics) %>%
+  as_kable(sci_threshold = TRUE, omit_leading_zero = TRUE) %>%
+  footnote() %>%
+  add_style()
+```
+
+```{r}
+#| label: define-combine-gof-metrics-detailed
+#| message: false
+#| code-fold: true
+#| column: body-outset-right
+
+# combine detailed gof metrics for per-model display
+combine_gof_metrics <- function(gof) {
+  # c-index
+  cindex <- data.frame(
+    component = "c_index",
+    metric = "c_index",
+    estimate = gof$c_index$bootstrap$mean,
+    sd = gof$c_index$bootstrap$sd,
+    ci_lower = unname(gof$c_index$bootstrap$ci["2.5%"]),
+    ci_upper = unname(gof$c_index$bootstrap$ci["97.5%"])
+  )
+
+  # calibration
+  calib_stats <- gof$calibration_stats$bootstrap
+  calib <- data.frame(
+    component = "calibration",
+    metric = colnames(calib_stats),
+    estimate = as.numeric(calib_stats["mean", ]),
+    sd = as.numeric(calib_stats["sd", ]),
+    ci_lower = as.numeric(calib_stats["2.5%", ]),
+    ci_upper = as.numeric(calib_stats["97.5%", ])
+  )
+
+  # weight metrics
+  wt <- data.frame(
+    component = "wt_metrics",
+    metric = c("mean", "median", "min", "max"),
+    estimate = c(
+      gof$wt_metrics$stats$mean,
+      gof$wt_metrics$stats$median,
+      gof$wt_metrics$stats$min,
+      gof$wt_metrics$stats$max
+    ),
+    sd = c(gof$wt_metrics$stats$sd, NA, NA, NA),
+    ci_lower = c(gof$wt_metrics$stats$mean_ci["2.5%"], NA, NA, NA),
+    ci_upper = c(gof$wt_metrics$stats$mean_ci["97.5%"], NA, NA, NA)
+  )
+
+  # bootstrap errors
+  boot_err <- gof$boot_errors$bootstrap %>%
+    dplyr::summarise(mae = mean(mae), medae = mean(medae), mape = mean(mape)) %>%
+    tidyr::pivot_longer(
+      cols = dplyr::everything(),
+      names_to = "metric",
+      values_to = "estimate"
+    ) %>%
+    dplyr::mutate(component = "boot_errors", sd = NA, ci_lower = NA, ci_upper = NA) %>%
+    dplyr::select(component, metric, estimate, sd, ci_lower, ci_upper)
+
+  # bootstrap r2
+  boot_r2 <- gof$boot_r2$bootstrap$summary %>%
+    dplyr::rename(estimate = mean) %>%
+    dplyr::mutate(component = "boot_r2") %>%
+    dplyr::select(component, metric, estimate, sd, ci_lower, ci_upper)
+
+  # bootstrap rmse
+  boot_rmse <- data.frame(
+    component = "boot_rmse",
+    metric = "rmse",
+    estimate = gof$boot_rmse$bootstrap$mean_coef_rmse,
+    sd = gof$boot_rmse$bootstrap$sd_coef_rmse,
+    ci_lower = NA,
+    ci_upper = NA
+  )
+
+  # bootstrap gof (aic, bic): heavy-tailed draws make mean/sd uninformative,
+  # so report the median with the 2.5-97.5 percentile interval of raw draws
+  med_or_na <- function(x) {
+    x <- x[is.finite(x)]
+    if (length(x) == 0) NA_real_ else stats::median(x)
+  }
+  q_or_na <- function(x, p) {
+    x <- x[is.finite(x)]
+    if (length(x) == 0) NA_real_ else as.numeric(stats::quantile(x, p))
+  }
+  gof_raw <- gof$boot_gof$bootstrap$raw
+  boot_gof <- data.frame(
+    component = "boot_gof",
+    metric = c("AIC", "BIC"),
+    estimate = c(med_or_na(gof_raw$aic), med_or_na(gof_raw$bic)),
+    sd = NA_real_,
+    ci_lower = c(q_or_na(gof_raw$aic, 0.025), q_or_na(gof_raw$bic, 0.025)),
+    ci_upper = c(q_or_na(gof_raw$aic, 0.975), q_or_na(gof_raw$bic, 0.975))
+  )
+
+  # combine all
+  tbl <- dplyr::bind_rows(cindex, calib, wt, boot_err, boot_r2, boot_rmse, boot_gof)
+
+  # weight distribution histogram
+  hist_plot <- if (inherits(gof$wt_metrics, "wt_metrics") &&
+    all(c("values", "histogram", "density") %in% names(gof$wt_metrics))) {
+    plot(gof$wt_metrics) + garamond_theme
+  } else {
+    warning("Cannot plot wt_metrics: missing components or incorrect class.")
+    NULL
+  }
+
+  list(summary = tbl, component = hist_plot)
+}
+```
+
+```{r}
+#| label: attach-gof-metrics
+#| code-fold: true
+#| column: body-outset-right
+
+# attach gof_metrics for convenient access
+if (!"gof_metrics" %in% search()) {
+  names(gof_metrics) <- paste0(
+    "model_", stringr::str_extract(names(gof_metrics), "[0-9]+$")
+  )
+  attach(gof_metrics)
+}
+
+col_names <- table_meta$per_model$col_names
+footnote_text <- table_meta$per_model$footnote
+```
+
+```{r}
+#| label: define-print-gof-function
+#| message: false
+#| warning: false
+#| code-fold: true
+#| column: body-outset-right
+
+# generate formatted gof table and figure for a single model
+print_gof <- function(model) {
+  gof_data <- combine_gof_metrics(model)
+
+  # row groups for table organization
+  row_groups <- beautify_names(gof_data$summary$component) %>%
+    md_to_html() %>%
+    row_grouping()
+
+  names(row_groups) <- c(
+    "C-Index", "Calibration", "Weighted Metrics", "Error Metrics",
+    "Explained Variance", "RMSE", "Model Fit"
+  )
+
+  # metric labels
+  metric_labels <- list(
+    c("C-Index"),
+    c("Slope", "Intercept", "$R^2$", "CITL", "$E_{\\text{max}}$"),
+    c("Mean", "Median", "Min", "Max"),
+    c("MAE", "MedAE", "MAPE"),
+    c("$R^2$", "Adj. $R^2$"),
+    c("RMSE"),
+    c("AIC", "BIC")
+  )
+
+  gof_table <- gof_data$summary %>%
+    dplyr::select(-component) %>%
+    dplyr::mutate(metric = md_to_html(unlist(metric_labels))) %>%
+    as_kable(sci_threshold = FALSE, digits = 3) %>%
+    kableExtra::pack_rows(index = row_groups, escape = FALSE) %>%
+    footnote() %>%
+    add_style()
+
+  list(table = gof_table, figure = gof_data$component)
+}
+```
+
+#### Model 1
+
+```{r}
+#| label: gof-model-1-table
+#| tbl-cap: "Goodness of Fit Metrics for Model 1"
+#| message: false
+#| warning: false
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+gof_1 <- print_gof(model_1)
+gof_1$table
+```
+
+```{r}
+#| label: gof-model-1-figure
+#| fig-cap: "Weight distribution for Model 1."
+#| code-fold: true
+#| fig-height: 8
+#| column: body-outset-right
+
+gof_1$figure
+```
+
+#### Model 2
+
+```{r}
+#| label: gof-model-2-table
+#| tbl-cap: "Goodness of Fit Metrics for Model 2"
+#| message: false
+#| warning: false
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+gof_2 <- print_gof(model_2)
+gof_2$table
+```
+
+```{r}
+#| label: gof-model-2-figure
+#| fig-cap: "Weight distribution for Model 2."
+#| code-fold: true
+#| fig-height: 8
+#| column: body-outset-right
+
+gof_2$figure
+```
+
+#### Model 3
+
+```{r}
+#| label: gof-model-3-table
+#| tbl-cap: "Goodness of Fit Metrics for Model 3"
+#| message: false
+#| warning: false
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+gof_3 <- print_gof(model_3)
+gof_3$table
+```
+
+```{r}
+#| label: gof-model-3-figure
+#| fig-cap: "Weight distribution for Model 3."
+#| code-fold: true
+#| fig-height: 8
+#| column: body-outset-right
+
+gof_3$figure
+```
+
+#### Model 4
+
+```{r}
+#| label: gof-model-4-table
+#| tbl-cap: "Goodness of Fit Metrics for Model 4"
+#| message: false
+#| warning: false
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+gof_4 <- print_gof(model_4)
+gof_4$table
+```
+
+```{r}
+#| label: gof-model-4-figure
+#| fig-cap: "Weight distribution for Model 4."
+#| code-fold: true
+#| fig-height: 8
+#| column: body-outset-right
+
+gof_4$figure
+```
+
+#### Model 5
+
+```{r}
+#| label: gof-model-5-table
+#| tbl-cap: "Goodness of Fit Metrics for Model 5"
+#| message: false
+#| warning: false
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+gof_5 <- print_gof(model_5)
+gof_5$table
+```
+
+```{r}
+#| label: gof-model-5-figure
+#| fig-cap: "Weight distribution for Model 5."
+#| code-fold: true
+#| fig-height: 8
+#| column: body-outset-right
+
+gof_5$figure
+```
+
+#### Model 6
+
+```{r}
+#| label: gof-model-6-table
+#| tbl-cap: "Goodness of Fit Metrics for Model 6"
+#| message: false
+#| warning: false
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+gof_6 <- print_gof(model_6)
+gof_6$table
+```
+
+```{r}
+#| label: gof-model-6-figure
+#| fig-cap: "Weight distribution for Model 6."
+#| code-fold: true
+#| fig-height: 8
+#| column: body-outset-right
+
+gof_6$figure
+```
+
+#### Model 7
+
+```{r}
+#| label: gof-model-7-table
+#| tbl-cap: "Goodness of Fit Metrics for Model 7"
+#| message: false
+#| warning: false
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+gof_7 <- print_gof(model_7)
+gof_7$table
+```
+
+```{r}
+#| label: gof-model-7-figure
+#| fig-cap: "Weight distribution for Model 7."
+#| code-fold: true
+#| fig-height: 8
+#| column: body-outset-right
+
+gof_7$figure
+```
+
+#### Model 8
+
+```{r}
+#| label: gof-model-8-table
+#| tbl-cap: "Goodness of Fit Metrics for Model 8"
+#| message: false
+#| warning: false
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+gof_8 <- print_gof(model_8)
+gof_8$table
+```
+
+```{r}
+#| label: gof-model-8-figure
+#| fig-cap: "Weight distribution for Model 8."
+#| code-fold: true
+#| fig-height: 8
+#| column: body-outset-right
+
+gof_8$figure
+```
+
+#### Model 9
+
+```{r}
+#| label: gof-model-9-table
+#| tbl-cap: "Goodness of Fit Metrics for Model 9"
+#| message: false
+#| warning: false
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+gof_9 <- print_gof(model_9)
+gof_9$table
+```
+
+```{r}
+#| label: gof-model-9-figure
+#| fig-cap: "Weight distribution for Model 9."
+#| code-fold: true
+#| fig-height: 8
+#| column: body-outset-right
+
+gof_9$figure
+```
+
+#### Model 10
+
+```{r}
+#| label: gof-model-10-table
+#| tbl-cap: "Goodness of Fit Metrics for Model 10"
+#| message: false
+#| warning: false
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+gof_10 <- print_gof(model_10)
+gof_10$table
+```
+
+```{r}
+#| label: gof-model-10-figure
+#| fig-cap: "Weight distribution for Model 10."
+#| code-fold: true
+#| fig-height: 8
+#| column: body-outset-right
+
+gof_10$figure
+```
+
+#### Model 11
+
+```{r}
+#| label: gof-model-11-table
+#| tbl-cap: "Goodness of Fit Metrics for Model 11"
+#| message: false
+#| warning: false
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+gof_11 <- print_gof(model_11)
+gof_11$table
+```
+
+```{r}
+#| label: gof-model-11-figure
+#| fig-cap: "Weight distribution for Model 11."
+#| code-fold: true
+#| fig-height: 8
+#| column: body-outset-right
+
+gof_11$figure
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+## Output 
+
+| File                                                | Content                                                      |
+| --------------------------------------------------- | ------------------------------------------------------------ |
+| `assets/models/gof_metrics.RData`                   | Aggregated bootstrap GOF metrics across all 12 models        |
+| `assets/models/gof_model_<k>.RData`                 | Per-model GOF metrics for debugging (k = 0–11)               |
+| `assets/models/summary_table_non_bootstrapped.html` | Robust regression summary table (non-bootstrapped estimates) |
+| `assets/models/summary_table_bootstrapped.html`     | Robust regression summary table (bootstrapped estimates)     |
+
+**Next:** None

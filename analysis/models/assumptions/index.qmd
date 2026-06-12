@@ -1,0 +1,1079 @@
+---
+title: "Influence Diagnostics & Sensitivity Sample"
+subtitle: "Diagnosing Unadjusted Fits and Constructing the Trimmed Dataset"
+author: "Siard van den Bosch"
+date: 2025-01-22
+date-modified: last-modified
+---
+
+```{=html}
+<script>
+  window.config = {offset: 8};
+</script>
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+|                |         |
+| -------------- | ------- |
+| **Purpose**    | Diagnose unadjusted fits and build a sensitivity-filtered dataset |
+| **Inputs**     | `unadjusted_data.rds`, `unadjusted_fits.rds` |
+| **Outputs**    | `adjusted_data.rds`, `unadjusted_influence_results.rds` |
+| **Method**     | MM-estimation residual diagnostics; OLS companion tests; multi-criterion influence flagging |
+| **Requires**   | [Step 7 (Unadjusted Models)](/analysis/models/unadjusted/index.qmd) |
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+::: {.callout-note icon=false}
+## Rationale
+
+- MM-estimation as primary estimator: bounded influence and high efficiency without strict distributional assumptions [@yohai1987]
+- Descriptive residual summaries over normality tests: large-sample normality tests reject trivial departures [@maronna2006]
+- OLS companions for classical tests: enables transparent reporting of Breusch-Pagan, RESET, and Durbin-Watson on identical row sets [@koenker1981note]
+- Combined-criteria influence flagging over automatic deletion: MM-estimators already downweight outliers via bounded influence [@hampel1986robust]
+- Cross-model aggregation of flags: targets cases repeatedly problematic across nested specifications [@cook1982residuals]
+- Sensitivity dataset as robustness check: full and filtered fits are compared, not corrected away [@rousseeuw1987]
+:::
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+```{r}
+#| label: load-project-resources
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# clear global environment, garbage collect, and detach packages
+rm(list = ls(envir = .GlobalEnv), envir = .GlobalEnv)
+invisible(gc(full = TRUE))
+invisible(lapply(grep(":|autoloads|globalenv", search(),
+  invert = TRUE, value = TRUE, ignore.case = TRUE
+), detach, character.only = TRUE, unload = TRUE, force = TRUE))
+
+# source custom functions (consistent with step 7)
+purrr::walk(file.path(here::here("assets", "functions"), paste0(c(
+  "as_kable", "set_globals", "pval_str", "add_style", "sci_to_tex",
+  "md_to_html", "describe", "format_p_value", "std_res", "footnote",
+  "beautify_names", "min_bootstraps", "numeric_df", "import_pipes"
+), ".R")), source)
+
+# set global options and import pipe operators
+set_globals()
+import_pipes()
+```
+
+```{r}
+#| label: load-step7-inputs
+#| code-fold: show
+#| column: body-outset-right
+
+# define input paths from step 7
+unadjusted_data_path <- here::here("assets", "data", "saved", "unadjusted_data.rds")
+unadjusted_fits_path <- here::here("assets", "models", "unadjusted_fits.rds")
+
+# validate input files exist
+if (!file.exists(unadjusted_data_path)) {
+  stop("Missing input from Step 7: ", unadjusted_data_path)
+}
+if (!file.exists(unadjusted_fits_path)) {
+  stop("Missing input from Step 7: ", unadjusted_fits_path)
+}
+
+# load unadjusted dataset
+unadjusted_data <- readRDS(unadjusted_data_path)
+if (!is.data.frame(unadjusted_data)) {
+  stop("'unadjusted_data' must be a data.frame.")
+}
+
+# retrieve robust regression models from step 7
+# step 7's robust_analysis() returns structured_models objects:
+# - $robust_model_results$model_object for lmrob fits
+# - $ols_model_results$model_object for OLS fits
+fits_raw <- readRDS(unadjusted_fits_path)
+if (!is.list(fits_raw) || length(fits_raw) < 2) {
+  stop("Expected a list of model fits in ", unadjusted_fits_path)
+}
+
+# extract lmrob fits, dropping null model (fit_0)
+lmrob_fits <- fits_raw %>%
+  purrr::map(~ .x$robust_model_results$model_object) %>%
+  tail(-1)
+
+if (length(lmrob_fits) == 0) {
+  stop("No models found after dropping the null model.")
+}
+if (is.null(names(lmrob_fits)) || any(names(lmrob_fits) == "")) {
+  names(lmrob_fits) <- paste0("fit_", seq_along(lmrob_fits))
+}
+
+# extract OLS companion fits (pre-computed in step 7)
+ols_fits <- fits_raw %>%
+  purrr::map(~ .x$ols_model_results$model_object) %>%
+  tail(-1)
+names(ols_fits) <- names(lmrob_fits)
+
+# record model count for downstream use
+n_models <- length(lmrob_fits)
+cat(glue("Loaded {n_models} substantive models (Models 1-{n_models}) from Step 7.\n\n"))
+```
+
+```{r}
+#| label: verify-step7-alignment
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+# display verification summary
+verify_msg <- glue(
+  "<div class='callout-note'>
+<strong>Step 7 Alignment Verification</strong><br><br>
+<strong>Data source:</strong> <code>unadjusted_data.rds</code> ({nrow(unadjusted_data)} observations, {ncol(unadjusted_data)} variables)<br>
+<strong>Model fits:</strong> <code>unadjusted_fits.rds</code> ({n_models} substantive models)<br>
+<strong>Model names:</strong> {paste(names(lmrob_fits), collapse = ', ')}<br>
+<strong>OLS companions:</strong> Pre-computed in Step 7 (not rebuilt)
+</div>"
+)
+cat(verify_msg)
+```
+
+## Diagnostic Tests and Assumption Checks
+
+### Assessing Residual Shape
+
+```{r}
+#| label: define-skew-kurt-function
+#| code-fold: true
+#| column: body-outset-right
+
+# compute sample skewness and kurtosis without extra packages
+skew_kurt <- function(x) {
+  x <- x[is.finite(x)]
+  n <- length(x)
+  if (n < 4) {
+    return(c(skewness = NA_real_, kurtosis = NA_real_))
+  }
+
+  m <- mean(x)
+  s <- stats::sd(x)
+  if (!is.finite(s) || s <= .Machine$double.eps) {
+    return(c(skewness = NA_real_, kurtosis = NA_real_))
+  }
+
+  z <- (x - m) / s
+  c(
+    skewness = mean(z^3),
+    kurtosis = mean(z^4)
+  )
+}
+```
+
+```{r}
+#| label: define-residual-shape-function
+#| code-fold: true
+#| column: body-outset-right
+
+# summarize standardized robust residuals for a single model
+residual_shape <- function(fit) {
+  r <- stats::residuals(fit) / fit$scale
+  r <- r[is.finite(r)]
+
+  if (length(r) == 0) {
+    return(data.frame(
+      n = 0L,
+      mean = NA_real_,
+      sd = NA_real_,
+      median = NA_real_,
+      MAD = NA_real_,
+      skewness = NA_real_,
+      kurtosis = NA_real_,
+      p_gt2 = NA_real_,
+      p_gt3 = NA_real_
+    ))
+  }
+
+  sk <- skew_kurt(r)
+
+  data.frame(
+    n = length(r),
+    mean = mean(r),
+    sd = stats::sd(r),
+    median = stats::median(r),
+    MAD = stats::mad(r),
+    skewness = unname(sk["skewness"]),
+    kurtosis = unname(sk["kurtosis"]),
+    p_gt2 = mean(abs(r) > 2),
+    p_gt3 = mean(abs(r) > 3)
+  )
+}
+```
+
+```{r}
+#| label: residual-shape-table-setup
+#| code-fold: true
+#| column: body-outset-right
+
+# table metadata for residual shape summary
+col_names <- c(
+  "Model", "$n$", "mean", "sd", "median", "MAD",
+  "skewness", "kurtosis", "$P(|r|>2)$", "$P(|r|>3)$"
+)
+
+footnote_text <- glue(
+  "Residual summaries are computed on standardized robust residuals $r = e/\\text{{scale}}$. ",
+  "Skewness and kurtosis are sample moment summaries (kurtosis is not excess kurtosis). ",
+  "$P(|r|>2)$ and $P(|r|>3)$ quantify tail heaviness relative to a standard normal reference."
+)
+```
+
+```{r}
+#| label: residual-shape-table
+#| tbl-cap: "Descriptive Summary of Standardized Robust Residuals"
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# compute residual shape summary across all models
+purrr::imap_dfr(lmrob_fits, ~ {
+  out <- residual_shape(.x)
+  out$Model <- gsub("fit_", "", .y)
+  out
+}) %>%
+  dplyr::select(Model, dplyr::everything()) %>%
+  as_kable(digits = 3) %>%
+  footnote() %>%
+  add_style()
+```
+
+```{r}
+#| label: define-combined-qq-function
+#| code-fold: true
+#| column: body-outset-right
+
+# create combined Q-Q plots using standardized robust residuals
+combined_qq_plot <- function(models, labels, jitter = TRUE) {
+  shapes <- (seq_along(models) - 1) %% 25
+
+  plot_data <- purrr::map2_df(
+    models, labels,
+    ~ data.frame(std_resid = std_res(.x), Model = .y)
+  )
+
+  # preserve the supplied label order in the legend (default factor levels
+  # sort alphabetically: 1, 10, 11, 2, ...)
+  plot_data$Model <- factor(plot_data$Model, levels = unique(unlist(labels)))
+
+  ggplot2::ggplot(plot_data, ggplot2::aes(
+    sample = std_resid,
+    colour = Model,
+    shape = Model
+  )) +
+    ggplot2::stat_qq(
+      size = 2,
+      alpha = 0.8,
+      position = if (jitter) ggplot2::position_jitter(width = 0.1) else ggplot2::position_identity()
+    ) +
+    ggplot2::geom_abline(
+      intercept = 0,
+      slope = 1,
+      linetype = "dashed",
+      linewidth = 0.5,
+      color = "black"
+    ) +
+    viridis::scale_color_viridis(
+      discrete = TRUE,
+      option = "D",
+      begin = 0.1,
+      end = 0.9,
+      name = "Model"
+    ) +
+    ggplot2::scale_shape_manual(values = shapes, name = "Model") +
+    ggplot2::labs(
+      x = "Theoretical Quantiles",
+      y = "Standardized Robust Residuals"
+    ) +
+    ggplot2::guides(
+      colour = ggplot2::guide_legend(nrow = 1, byrow = TRUE),
+      shape = ggplot2::guide_legend(nrow = 1, byrow = TRUE)
+    )
+}
+```
+
+```{r}
+#| label: normal-qq-plots
+#| fig-cap: "Q-Q Plots of Standardized Robust Residuals"
+#| code-fold: true
+#| column: body-outset-right
+
+combined_qq_plot(lmrob_fits, as.list(as.character(seq_along(lmrob_fits))))
+```
+
+### Evaluating Heteroskedasticity
+
+```{r}
+#| label: bp-test-table-setup
+#| code-fold: true
+#| column: body-outset-right
+
+# table metadata for Breusch-Pagan tests
+col_names <- c("Model", "Statistic", "df", "$p$-value")
+
+footnote_text <- glue(
+  "Studentized Breusch-Pagan (Koenker) tests are computed on OLS companion models ",
+  "fit to the same rows as each robust model. The null is constant variance. ",
+  "These tests are used as diagnostics rather than gatekeepers for model validity."
+)
+```
+
+```{r}
+#| label: bp-test-for-heteroscedasticity
+#| tbl-cap: "Studentized Breusch-Pagan Tests on OLS Companion Models"
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# compute Breusch-Pagan tests across all OLS companion models
+bp_results <- purrr::imap_dfr(ols_fits, ~ {
+  test_res <- lmtest::bptest(.x, studentize = TRUE)
+
+  data.frame(
+    Model = gsub("fit_", "", .y),
+    Statistic = unname(test_res$statistic),
+    df = unname(test_res$parameter),
+    p_value = format_p_value(
+      test_res$p.value,
+      add_stars = TRUE,
+      use_concat = TRUE,
+      omit_p_label = TRUE,
+      use_dot_for_0.1 = TRUE
+    )
+  )
+})
+
+bp_results %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+```{r}
+#| label: define-scale-location-function
+#| code-fold: true
+#| column: body-outset-right
+
+# create scale-location plot for a single robust model
+scale_location_plot <- function(fit, name = NULL) {
+  point_color <- viridis::viridis(4)[2]
+  line_color <- viridis::viridis(4)[4]
+
+  if (!"scale" %in% names(fit)) {
+    stop("Model does not contain 'scale' component.")
+  }
+
+  std_resid <- stats::residuals(fit) / fit$scale
+
+  model_data <- tibble::tibble(
+    .fitted = stats::fitted(fit),
+    sqrt_abs_std_resid = sqrt(abs(std_resid))
+  )
+
+  ggplot2::ggplot(model_data, ggplot2::aes(.fitted, sqrt_abs_std_resid)) +
+    ggplot2::geom_point(alpha = 0.6, color = point_color) +
+    ggplot2::geom_smooth(
+      method = "loess",
+      se = TRUE,
+      formula = y ~ x,
+      color = line_color,
+      method.args = list(
+        span = 1,
+        degree = 1,
+        family = "symmetric",
+        control = stats::loess.control(surface = "direct")
+      )
+    ) +
+    ggplot2::labs(
+      title = name,
+      x = "Fitted values",
+      y = expression(sqrt("| Std. Residuals |"))
+    )
+}
+```
+
+```{r}
+#| label: scale-location-plot-generation
+#| fig-cap: "Scale-Location Plots (Robust Models)"
+#| fig-subcap: true
+#| layout-ncol: 2
+#| message: false
+#| code-fold: true
+#| column: body-outset-right
+
+purrr::iwalk(lmrob_fits, function(fit, nm) {
+  plot(scale_location_plot(fit, name = paste0("Model ", gsub("fit_", "", nm))))
+})
+```
+
+### Testing Mean-Structure Adequacy
+
+```{r}
+#| label: define-response-predictor-function
+#| code-fold: true
+#| column: body-outset-right
+
+# marginal model plot: outcome vs linear predictor (fitted values);
+# under a correct mean structure the data loess tracks the y = x line
+response_predictor_plot <- function(fit, name = NULL) {
+  point_color <- viridis::viridis(4)[2]
+  line_color <- viridis::viridis(4)[4]
+
+  mf <- stats::model.frame(fit)
+  if (ncol(mf) < 2) return(NULL)
+
+  d <- tibble::tibble(
+    fitted = stats::fitted(fit),
+    y = mf[[1]]
+  )
+
+  ggplot2::ggplot(d, ggplot2::aes(fitted, y)) +
+    ggplot2::geom_point(alpha = 0.4, color = point_color) +
+    ggplot2::geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray50") +
+    ggplot2::geom_smooth(
+      method = "loess", se = TRUE, formula = y ~ x, color = line_color,
+      method.args = list(span = 1, degree = 1, family = "symmetric",
+        control = stats::loess.control(surface = "direct"))
+    ) +
+    ggplot2::labs(
+      title = name,
+      x = "Linear predictor (fitted)",
+      y = names(mf)[1]
+    )
+}
+```
+
+```{r}
+#| label: response-predictor-plots
+#| fig-cap: "Outcome vs Linear Predictor (Marginal Model Plots)"
+#| fig-subcap: true
+#| layout-ncol: 2
+#| message: false
+#| code-fold: true
+#| column: body-outset-right
+
+purrr::iwalk(lmrob_fits, function(fit, nm) {
+  p <- response_predictor_plot(fit, name = paste0("Model ", gsub("fit_", "", nm)))
+  if (!is.null(p)) plot(p)
+})
+```
+
+```{r}
+#| label: define-residuals-fitted-function
+#| code-fold: true
+#| column: body-outset-right
+
+# create residuals vs fitted plot for a single robust model
+residuals_fitted_plot <- function(fit, name = NULL) {
+  point_color <- viridis::viridis(4)[2]
+  line_color <- viridis::viridis(4)[4]
+
+  std_resid <- stats::residuals(fit) / fit$scale
+
+  model_data <- tibble::tibble(
+    .fitted = stats::fitted(fit),
+    std_resid = std_resid
+  )
+
+  ggplot2::ggplot(model_data, ggplot2::aes(.fitted, std_resid)) +
+    ggplot2::geom_point(alpha = 0.6, color = point_color) +
+    ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+    ggplot2::geom_smooth(
+      method = "loess",
+      se = TRUE,
+      formula = y ~ x,
+      color = line_color,
+      method.args = list(
+        span = 1,
+        degree = 1,
+        family = "symmetric",
+        control = stats::loess.control(surface = "direct")
+      )
+    ) +
+    ggplot2::labs(
+      title = name,
+      x = "Fitted values",
+      y = "Standardized Residuals"
+    )
+}
+```
+
+```{r}
+#| label: residuals-fitted-plots
+#| fig-cap: "Residuals vs Fitted (Robust Models)"
+#| fig-subcap: true
+#| layout-ncol: 2
+#| message: false
+#| code-fold: true
+#| column: body-outset-right
+
+purrr::iwalk(lmrob_fits, function(fit, nm) {
+  plot(residuals_fitted_plot(fit, name = paste0("Model ", gsub("fit_", "", nm))))
+})
+```
+
+```{r}
+#| label: reset-test-table-setup
+#| code-fold: true
+#| column: body-outset-right
+
+# table metadata for RESET tests
+col_names <- c("Model", "Statistic", "df1", "df2", "$p$-value")
+
+footnote_text <- glue(
+  "RESET tests are computed on OLS companion models. ",
+  "The null hypothesis is correct mean specification. ",
+  "These tests are used as diagnostics rather than gatekeepers."
+)
+```
+
+```{r}
+#| label: reset-test-for-specification
+#| tbl-cap: "Ramsey RESET Tests on OLS Companion Models"
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# compute RESET tests across all OLS companion models
+reset_results <- purrr::imap_dfr(ols_fits, ~ {
+  test_res <- lmtest::resettest(.x, power = 2:3, type = "fitted")
+
+  data.frame(
+    Model = gsub("fit_", "", .y),
+    Statistic = unname(test_res$statistic),
+    df1 = unname(test_res$parameter[1]),
+    df2 = unname(test_res$parameter[2]),
+    p_value = format_p_value(
+      test_res$p.value,
+      add_stars = TRUE,
+      use_concat = TRUE,
+      omit_p_label = TRUE,
+      use_dot_for_0.1 = TRUE
+    )
+  )
+})
+
+reset_results %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+### Checking Autocorrelation
+
+```{r}
+#| label: dw-test-table-setup
+#| code-fold: true
+#| column: body-outset-right
+
+# table metadata for Durbin-Watson tests
+col_names <- c("Model", "Statistic", "$p$-value")
+
+footnote_text <- glue(
+  "Durbin-Watson tests are computed on OLS companion models. ",
+  "The null hypothesis is no first-order autocorrelation."
+)
+```
+
+```{r}
+#| label: dw-test-for-autocorrelation
+#| tbl-cap: "Durbin-Watson Tests on OLS Companion Models"
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# compute Durbin-Watson tests across all OLS companion models
+dw_results <- purrr::imap_dfr(ols_fits, ~ {
+  test_res <- lmtest::dwtest(.x)
+
+  data.frame(
+    Model = gsub("fit_", "", .y),
+    Statistic = unname(test_res$statistic),
+    p_value = format_p_value(
+      test_res$p.value,
+      add_stars = TRUE,
+      use_concat = TRUE,
+      omit_p_label = TRUE,
+      use_dot_for_0.1 = TRUE
+    )
+  )
+})
+
+dw_results %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+### Assessing Multicollinearity
+
+```{r}
+#| label: define-vif-functions
+#| code-fold: true
+#| column: body-outset-right
+
+# compute VIF from model matrix
+calc_vif <- function(mm) {
+  int <- match("(Intercept)", colnames(mm), nomatch = 0L)
+  if (int > 0L) {
+    mm <- mm[, -int, drop = FALSE]
+  }
+
+  if (ncol(mm) < 2L) {
+    return(setNames(numeric(0), character(0)))
+  }
+
+  ok <- rowSums(!is.finite(mm)) == 0L
+  mm <- mm[ok, , drop = FALSE]
+
+  if (nrow(mm) < 3L) {
+    out <- rep(NA_real_, ncol(mm))
+    names(out) <- colnames(mm)
+    return(out)
+  }
+
+  vifs <- vapply(seq_len(ncol(mm)), function(j) {
+    y <- mm[, j]
+    x <- mm[, -j, drop = FALSE]
+
+    sst <- sum((y - mean(y))^2)
+    if (!is.finite(sst) || sst <= .Machine$double.eps) {
+      return(NA_real_)
+    }
+
+    aux <- stats::lm.fit(x = cbind(1, x), y = y)
+    rss <- sum(aux$residuals^2)
+    r2 <- 1 - rss / sst
+    r2 <- max(min(r2, 1), 0)
+
+    if (r2 >= 1 - sqrt(.Machine$double.eps)) {
+      return(Inf)
+    }
+
+    1 / (1 - r2)
+  }, numeric(1))
+
+  names(vifs) <- colnames(mm)
+  vifs
+}
+
+# extract maximum VIF from a fitted model
+get_max_vif <- function(fit) {
+  mm <- tryCatch(stats::model.matrix(fit), error = function(e) NULL)
+  if (is.null(mm)) {
+    return(NA_real_)
+  }
+
+  vifs <- calc_vif(mm)
+  if (length(vifs) == 0 || all(is.na(vifs))) {
+    return(NA_real_)
+  }
+
+  max(vifs, na.rm = TRUE)
+}
+```
+
+```{r}
+#| label: compute-max-vifs
+#| code-fold: true
+#| column: body-outset-right
+
+# compute max VIF for each model (with progress bar)
+max_vifs <- pbapply::pbsapply(lmrob_fits, get_max_vif)
+```
+
+```{r}
+#| label: vif-table-setup
+#| code-fold: true
+#| column: body-outset-right
+
+# table metadata for VIF summary
+col_names <- c("Model", "Max VIF$^a$")
+
+footnote_text <- glue(
+  "The VIF quantifies how strongly each regressor is linearly explained by the others. ",
+  "$^a$The maximum VIF across regressors is reported for each model."
+)
+```
+
+```{r}
+#| label: vif-table
+#| tbl-cap: "Variance Inflation Factors (VIFs)"
+#| code-fold: show
+#| column: body-outset-right
+
+tibble::tibble(
+  Model = seq_along(lmrob_fits),
+  MaxVIF = as.numeric(max_vifs)
+) %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+### Identifying Influential Observations
+
+```{r}
+#| label: define-influence-helper-functions
+#| code-fold: true
+#| column: body-outset-right
+
+# extract participant IDs from fitted model
+get_pid <- function(fit) {
+  mf <- tryCatch(stats::model.frame(fit), error = function(e) NULL)
+  pid <- if (!is.null(mf)) rownames(mf) else NULL
+
+  if (is.null(pid) || anyNA(pid) || any(pid == "")) {
+    pid <- as.character(seq_along(stats::residuals(fit)))
+  }
+
+  pid
+}
+
+# create long-format influence diagnostics for a single model
+influence_long_df <- function(fit, model_name) {
+  pid <- get_pid(fit)
+  n <- length(pid)
+
+  r <- stats::residuals(fit) / fit$scale
+  h <- tryCatch(stats::hatvalues(fit), error = function(e) rep(NA_real_, n))
+  w <- fit$rweights
+  if (is.null(w)) {
+    w <- rep(NA_real_, n)
+  }
+
+  p <- length(stats::coef(fit))
+  lev_thr <- 2 * p / n
+
+  score <- abs(r) * (h / pmax(1 - h, .Machine$double.eps))
+
+  tibble::tibble(
+    pid = as.character(pid),
+    Model = model_name,
+    std_resid = as.numeric(r),
+    leverage = as.numeric(h),
+    rweight = as.numeric(w),
+    lev_thr = lev_thr,
+    score = as.numeric(score)
+  )
+}
+
+# map flagged pids back to data rows
+match_ids_to_rows <- function(data, pids) {
+  pids <- unique(as.character(pids))
+  if (length(pids) == 0) {
+    return(integer(0))
+  }
+
+  candidate_cols <- c("pid", "id", "obs_id", "row_id", "case_id", "participant_id", "idnummer")
+  data_cols_lower <- tolower(names(data))
+
+  for (nm in candidate_cols) {
+    j <- match(nm, data_cols_lower, nomatch = 0L)
+    if (j > 0L) {
+      col <- names(data)[j]
+      hits <- which(as.character(data[[col]]) %in% pids)
+      if (length(hits) > 0) {
+        return(hits)
+      }
+    }
+  }
+
+  if (!is.null(rownames(data))) {
+    hits <- which(rownames(data) %in% pids)
+    if (length(hits) > 0) {
+      return(hits)
+    }
+  }
+
+  idx <- suppressWarnings(as.integer(pids))
+  if (!anyNA(idx) && all(idx >= 1) && all(idx <= nrow(data))) {
+    return(idx)
+  }
+
+  integer(0)
+}
+```
+
+- **in**: `lmrob_fits` (per-model robust diagnostics)
+- **out**: `influence_results$influential_obs`, `influence_results$influential_ids`
+- **rule**: flag observation in a model if robust weight is below the global 5th percentile and $|r|>2.5$, or if leverage exceeds $2p/n$ and $|r|>2.5$; mark as influential if flagged in at least 25% of models or if its maximum score reaches the 99th percentile
+
+```{r}
+#| label: compute-influence-summary
+#| code-fold: show
+#| column: body-outset-right
+
+# define flagging thresholds
+alpha_weight <- 0.05
+resid_cut <- 2.5
+
+# compute influence diagnostics across all models
+infl_long <- purrr::imap_dfr(lmrob_fits, ~ {
+  influence_long_df(.x, model_name = gsub("fit_", "", .y))
+})
+
+# global robust-weight threshold (bottom 5% across all models)
+w_thr <- stats::quantile(infl_long$rweight, probs = alpha_weight, na.rm = TRUE)
+
+# apply flagging criteria
+infl_long <- infl_long %>%
+  dplyr::mutate(
+    low_weight = is.finite(rweight) & rweight < w_thr,
+    high_leverage = is.finite(leverage) & leverage > lev_thr, # per-model 2p/n column
+    large_resid = is.finite(std_resid) & abs(std_resid) > resid_cut,
+    flag_model = (low_weight & large_resid) | (high_leverage & large_resid)
+  )
+
+k <- length(lmrob_fits)
+
+# aggregate influence flags across models
+infl_summary <- infl_long %>%
+  dplyr::group_by(pid) %>%
+  dplyr::summarise(
+    n_flag = sum(flag_model, na.rm = TRUE),
+    max_abs_resid = max(abs(std_resid), na.rm = TRUE),
+    max_leverage = max(leverage, na.rm = TRUE),
+    min_rweight = min(rweight, na.rm = TRUE),
+    max_score = max(score, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# identify influential observations using combined criteria
+score_thr <- stats::quantile(infl_summary$max_score, probs = 0.99, na.rm = TRUE)
+flag_min_models <- ceiling(k * 0.25)
+
+influential_obs <- infl_summary %>%
+  dplyr::mutate(
+    influential = (n_flag >= flag_min_models) | (max_score >= score_thr)
+  ) %>%
+  dplyr::arrange(dplyr::desc(influential), dplyr::desc(n_flag), dplyr::desc(max_score))
+
+influential_ids <- influential_obs %>%
+  dplyr::filter(influential) %>%
+  dplyr::pull(pid) %>%
+  unique()
+
+# store results
+influence_results <- list(
+  influential_obs = influential_obs,
+  influential_ids = influential_ids,
+  thresholds = list(
+    w_thr = w_thr,
+    resid_cut = resid_cut,
+    lev_rule = "2p/n",
+    score_thr = score_thr,
+    min_models = flag_min_models
+  )
+)
+```
+
+```{r}
+#| label: display-influence-message
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+# compute summary statistics
+num_influential <- length(influence_results$influential_ids)
+data_size <- nrow(unadjusted_data)
+pct_influential <- if (data_size > 0) round(100 * num_influential / data_size, 2) else NA_real_
+
+htmltools::HTML(glue(
+  "<p>Out of {data_size} observations, {num_influential} ({pct_influential}%) were flagged as potentially influential.<br>",
+  "Global robust-weight threshold: {round(influence_results$thresholds$w_thr, 3)} (alpha = {alpha_weight}). ",
+  "Residual cut: |r| > {resid_cut}. ",
+  "Leverage rule: {influence_results$thresholds$lev_rule}. ",
+  "Across-model flag: at least {influence_results$thresholds$min_models} of {k} models or max score above the 99th percentile.",
+  "</p>"
+))
+```
+
+```{r}
+#| label: influence-table-setup
+#| code-fold: true
+#| column: body-outset-right
+
+# table metadata for influential observations
+col_names <- c(
+  "pid", "Influential", "n_flag", "max |r|", "max leverage", "min rweight", "max score"
+)
+
+footnote_text <- glue(
+  "Rows are aggregated across models. 'n_flag' is the number of models where the observation ",
+  "meets the within-model rule (low weight and large residual, or high leverage and large residual). ",
+  "'max score' is max(|r| × h/(1-h)) across models and is used as an additional screen."
+)
+```
+
+```{r}
+#| label: influence-table
+#| tbl-cap: "Potentially Influential Observations (Across Models)"
+#| message: false
+#| code-fold: show
+#| column: page-right
+
+influence_results$influential_obs %>%
+  dplyr::mutate(
+    Influential = ifelse(influential, 1, 0)
+  ) %>%
+  dplyr::select(pid, Influential, n_flag, max_abs_resid, max_leverage, min_rweight, max_score) %>%
+  as_kable(digits = 3) %>%
+  footnote() %>%
+  add_style()
+```
+
+```{r}
+#| label: define-influence-plot-function
+#| code-fold: true
+#| column: body-outset-right
+
+# create influence diagnostic panel for a single model
+plot_influence_panel <- function(df, flagged_ids, name = NULL) {
+  df <- df %>%
+    dplyr::mutate(
+      flagged = pid %in% flagged_ids,
+      label = ifelse(flagged, pid, NA_character_),
+      influence = 2 / pmax(1 - leverage, .Machine$double.eps)
+    )
+
+  breaks <- unique(stats::quantile(df$influence, c(0, 0.33, 0.67, 1), na.rm = TRUE))
+  breaks <- breaks[is.finite(breaks)]
+  n_intervals <- length(breaks) - 1
+
+  if (n_intervals <= 0) {
+    df$influence_cat <- factor("Low", levels = "Low")
+  } else {
+    labels <- c("Low", "Medium", "High")[seq_len(n_intervals)]
+    df$influence_cat <- cut(
+      df$influence,
+      breaks = breaks,
+      labels = labels,
+      include.lowest = TRUE
+    )
+  }
+
+  p <- ggplot2::ggplot(df, ggplot2::aes(leverage, std_resid, color = influence_cat)) +
+    ggplot2::geom_point(alpha = 0.6) +
+    ggplot2::geom_smooth(
+      method = "loess",
+      se = TRUE,
+      alpha = 0.3,
+      formula = y ~ x,
+      method.args = list(
+        span = 1,
+        degree = 1,
+        family = "symmetric",
+        control = stats::loess.control(surface = "direct")
+      )
+    ) +
+    ggplot2::labs(
+      title = name,
+      x = "Leverage",
+      y = "Standardized Residuals",
+      color = "Influence"
+    ) +
+    ggplot2::scale_color_viridis_d(option = "D", direction = -1) +
+    ggplot2::guides(color = ggplot2::guide_legend(title = "Influence"))
+
+  if (requireNamespace("ggrepel", quietly = TRUE) && any(df$flagged, na.rm = TRUE)) {
+    p <- p + ggrepel::geom_text_repel(
+      ggplot2::aes(label = label),
+      size = 2,
+      max.overlaps = 20,
+      na.rm = TRUE
+    )
+  }
+
+  p
+}
+```
+
+```{r}
+#| label: generate-influence-plots
+#| fig-cap: "Leverage vs Standardized Robust Residuals (Influence Categories)"
+#| message: false
+#| code-fold: show
+#| layout-ncol: 2
+#| layout-type: grid
+#| column: body-outset-right
+
+flagged_ids <- influence_results$influential_ids
+
+# split() orders panels alphabetically (1, 10, 11, 2, ...); restore numeric order
+infl_split <- split(infl_long, infl_long$Model)
+infl_split <- infl_split[order(as.integer(names(infl_split)))]
+invisible(purrr::iwalk(infl_split, ~ print(
+  plot_influence_panel(.x, flagged_ids, name = paste0("Model ", .y))
+)))
+```
+
+## Create Sensitivity Dataset
+
+- *in*: `unadjusted_data`, `influence_results$influential_ids`
+- *out*: `adjusted_data.rds`, `unadjusted_influence_results.rds`
+- *rule*: drop rows whose pid matches any influential id; pass through unchanged if none
+
+```{r}
+#| label: save-adjusted-data
+#| code-fold: show
+#| column: body-outset-right
+
+# identify rows to exclude based on influential observation flags
+rows_to_drop <- match_ids_to_rows(unadjusted_data, influence_results$influential_ids)
+
+# create sensitivity-filtered dataset
+if (length(rows_to_drop) == 0) {
+  adjusted_data <- unadjusted_data
+} else {
+  adjusted_data <- unadjusted_data[-rows_to_drop, , drop = FALSE]
+}
+
+# define output directories
+output_dir <- here::here("assets", "data", "saved")
+models_dir <- here::here("assets", "models")
+
+# save outputs
+saveRDS(adjusted_data, file = file.path(output_dir, "adjusted_data.rds"))
+saveRDS(influence_results, file = file.path(models_dir, "unadjusted_influence_results.rds"))
+```
+
+```{r}
+#| label: export-summary
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+export_msg <- glue(
+  "<div class='callout-note'>
+<strong>Exported Files</strong><br><br>
+<strong>Sensitivity dataset:</strong> <code>adjusted_data.rds</code> ({nrow(adjusted_data)} observations after filtering)<br>
+<strong>Influence diagnostics:</strong> <code>unadjusted_influence_results.rds</code><br>
+<strong>Observations flagged:</strong> {num_influential} ({pct_influential}%)<br>
+<strong>Observations retained:</strong> {nrow(adjusted_data)} ({round(100 * nrow(adjusted_data) / data_size, 1)}%)
+</div>"
+)
+cat(export_msg)
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+## Output
+
+| File                                              | Content                                             |
+|---------------------------------------------------|-----------------------------------------------------|
+| `assets/data/saved/adjusted_data.rds`             | sensitivity-filtered dataset (flagged rows removed) |
+| `assets/models/unadjusted_influence_results.rds`  | per-observation flags, thresholds, influential IDs  |
+
+**Next:** [Step 9 (Adjusted Models)](/analysis/models/adjusted/index.qmd)

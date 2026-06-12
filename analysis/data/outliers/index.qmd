@@ -1,0 +1,860 @@
+---
+title: "Detecting & Removing Outliers"
+subtitle: "Univariate and Multivariate Approaches for Data Refinement"
+author: "Siard van den Bosch"
+date: 2024-12-17
+date-modified: last-modified
+---
+
+```{=html}
+<script>
+  window.config = {offset: 4}
+</script>
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+|                |         |
+| -------------- | ------- |
+| **Purpose**    | Remove univariate and multivariate outliers from the analysis dataset |
+| **Inputs**     | `data_for_imputation.sav` |
+| **Outputs**    | `data_without_outliers.sav`, `outlier_cases_removed.csv` |
+| **Method**     | IQR/MAD univariate detection; LOF multivariate detection |
+| **Requires**   | [Step 3 (Data Cleaning)](/analysis/data/cleaning/index.qmd) |
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+::: {.callout-note icon=false}
+## Rationale
+
+- IQR for `dhd_kcal`: classical robust rule for energy intake distributions [@tukey1977]
+- MAD for `dhd_index`: robust to non-normality, 50% breakdown point, threshold 2.5 approximates 99% normal coverage [@leys2013]
+- LOF for multivariate detection: density-based, no distributional assumption [@breunig2000]
+- Tukey adjusted-boxplot cutoff: skew-corrected via medcouple, default alpha = 0.05 controls Type-I error [@hubert2008]
+- Partner variables excluded from complete-case filter: structural missingness for non-partnered respondents [@vanbuuren2018]
+- SES composites excluded from outlier detection: extreme socioeconomic values represent legitimate population variation, not measurement error [@aguinis2013]
+:::
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+```{r}
+#| label: load-project-resources
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# clear global env and force full garbage collection
+rm(list = ls(envir = .GlobalEnv), envir = .GlobalEnv)
+invisible(gc(full = TRUE))
+
+# detach non-base packages to avoid namespace interference
+invisible(lapply(grep(":|autoloads|globalenv", search(),
+  invert = TRUE, value = TRUE, ignore.case = TRUE
+), detach, character.only = TRUE, unload = TRUE, force = TRUE))
+
+# source custom functions for data handling and visualization
+purrr::walk(file.path(here::here("assets", "functions"), paste0(c(
+  "remove_invariant", "md_to_html", "set_globals", "add_style",
+  "format_numeric", "as_kable", "format_p_value", "import_pipes",
+  "footnote", "beautify_names", "numeric_df", "describe"
+), ".R")), source)
+
+# set global options and import pipe operators
+set_globals()
+import_pipes()
+
+# load dataset prepared for imputation (from step 3)
+main <- haven::read_sav(
+  here::here("assets", "data", "saved", "data_for_imputation.sav"),
+  user_na = FALSE
+)
+```
+
+```{r}
+#| label: define-constants
+#| code-fold: true
+#| column: body-outset-right
+
+# partner-specific variables with structural missingness (NA by design for non-partnered)
+partner_vars <- c("education_partner", "isei08_partner")
+
+# parental SES composites from step 3 (dimension_referent convention)
+ses_composites <- c("education_parental", "isei08_parental")
+
+# target variables for univariate outlier detection
+univariate_targets <- list(
+  dhd_kcal = "iqr",
+  dhd_index = "mad"
+)
+```
+
+## Verify Dataset from Step 3
+
+```{r}
+#| label: verify-step3-variables
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+# identify which structural and SES variables are present
+structural_vars_present <- partner_vars[
+  partner_vars %in% names(main)
+]
+ses_present <- ses_composites[ses_composites %in% names(main)]
+
+# count non-partnered respondents
+n_non_partnered <- sum(main$partner == 0, na.rm = TRUE)
+
+# generate informative message about variable handling
+if (length(ses_present) > 0 || length(structural_vars_present) > 0) {
+  ses_msg <- glue(
+    "<div class='callout-note'>
+    <strong>SES Variables from Step 3</strong><br><br>
+    <strong>Parental composites:</strong> ",
+    if (length(ses_present) > 0) {
+      glue("<code>{paste(ses_present, collapse = '</code>, <code>')}</code>")
+    } else {
+      "None detected"
+    },
+    "<br>
+    <strong>Partner indicators:</strong> ",
+    if (length(structural_vars_present) > 0) {
+      glue("<code>{paste(structural_vars_present, collapse = '</code>, <code>')}</code>")
+    } else {
+      "None detected"
+    },
+    "<br><br>
+    <strong>Structural missingness:</strong> Partner-specific variables ",
+    "(<code>education_partner</code>, <code>isei08_partner</code>) contain NA values ",
+    "by design for non-partnered respondents (n = {n_non_partnered}). ",
+    "These cases represent a legitimate subpopulation and are <em>not</em> excluded ",
+    "from outlier detection procedures. Partner variables are excluded from ",
+    "complete-case filtering and multivariate LOF detection to prevent inappropriate ",
+    "sample reduction.
+    </div>"
+  )
+  cat(ses_msg)
+}
+```
+
+## Clean Dataset for Outlier Detection
+
+```{r}
+#| label: data-preparation
+#| code-fold: show
+#| column: body-outset-right
+
+# remove invariant columns and replace non-finite values with NA
+clean_data <- main %>%
+  remove_invariant() %>%
+  dplyr::mutate(
+    dplyr::across(
+      dplyr::where(is.numeric),
+      ~ ifelse(is.finite(.x), .x, NA)
+    )
+  ) %>%
+  # select numeric columns with non-zero variance
+  dplyr::select(dplyr::where(~ is.numeric(.x) && sd(.x, na.rm = TRUE) != 0))
+
+# identify partner-specific variables present in cleaned data
+partner_vars_in_data <- intersect(partner_vars, names(clean_data))
+
+# retain complete cases EXCLUDING partner-specific variables
+# this preserves non-partnered respondents with legitimate NA values
+clean_data <- if (length(partner_vars_in_data) > 0) {
+  clean_data %>%
+    dplyr::filter(complete.cases(
+      dplyr::select(., -dplyr::any_of(partner_vars_in_data))
+    ))
+} else {
+  clean_data %>%
+    dplyr::filter(complete.cases(.))
+}
+
+# record sample sizes
+n_original <- nrow(main)
+n_clean <- nrow(clean_data)
+n_excluded_cleaning <- n_original - n_clean
+```
+
+```{r}
+#| label: cleaning-summary
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+cat(glue(
+  "<p><strong>Data Cleaning Summary:</strong> ",
+  "Of {n_original} observations in the input dataset, ",
+  "{n_clean} ({round(100 * n_clean / n_original, 1)}%) were retained for ",
+  "outlier detection after removing cases with missing values on substantive ",
+  "variables. Partner-specific variables were excluded from this filter to ",
+  "preserve non-partnered respondents.</p>"
+))
+```
+
+## Detect Univariate Outliers
+
+```{r}
+#| label: univariate-outlier-function
+#| code-fold: show
+#| column: body-outset-right
+
+# detect univariate outliers using IQR, z-score, or MAD method
+univariate_outliers <- function(data, var, meth = "iqr", thresh = NULL) {
+  stopifnot(meth %in% c("iqr", "zscore", "mad"))
+
+  # set method-specific default threshold
+  if (is.null(thresh)) {
+    thresh <- if (meth == "iqr") 1.5 else 2.5
+  }
+
+  # extract finite, non-NA values
+  x <- data[[var]][!is.na(data[[var]]) & is.finite(data[[var]])]
+
+  # calculate thresholds based on method
+  lims <- switch(meth,
+    "iqr" = {
+      q <- quantile(x, c(0.25, 0.75), names = FALSE)
+      iqr <- diff(q)
+      q + c(-thresh, thresh) * iqr
+    },
+    "zscore" = mean(x) + c(-1, 1) * thresh * sd(x),
+    "mad" = {
+      med <- median(x)
+      med + c(-1, 1) * thresh * mad(x)
+    }
+  )
+
+  # identify outlier indices
+  outs_idx <- which(x < lims[1] | x > lims[2])
+
+  # compute mean and standard error
+  stats_val <- c(mean = mean(x), se = sd(x) / sqrt(length(x)))
+
+  # calculate 95% confidence interval
+  ci <- stats_val["mean"] + c(-1.96, 1.96) * stats_val["se"]
+
+  # return NULL if non-finite values present
+  if (!all(is.finite(c(stats_val, ci)))) {
+    return(NULL)
+  }
+
+  list(
+    outliers = x[outs_idx],
+    ids = data$idnummer[!is.na(data[[var]]) & is.finite(data[[var]])][outs_idx],
+    method = meth,
+    lower_threshold = lims[1],
+    upper_threshold = lims[2],
+    mean = stats_val["mean"],
+    ci_lower = ci[1],
+    ci_upper = ci[2]
+  )
+}
+```
+
+```{r}
+#| label: detect-outliers-function
+#| code-fold: show
+#| column: body-outset-right
+
+# detect outliers across multiple variables with specified methods
+detect_outliers <- function(data, vars, meths) {
+  data$outlier <- NA_character_
+
+  # apply univariate detection to each variable
+  res <- Map(function(v, m) univariate_outliers(data, v, m), vars, meths)
+
+  # flag outliers in data
+  for (i in seq_along(vars)) {
+    if (!is.null(res[[i]])) {
+      ids <- res[[i]]$ids
+      label <- glue("Univariate ({beautify_names(vars[i])})")
+      data$outlier[data$idnummer %in% ids] <- label
+    }
+  }
+
+  # extract summary metrics
+  metrics <- c(
+    "method", "mean", "ci_lower", "ci_upper",
+    "upper_threshold", "lower_threshold"
+  )
+
+  sum_data <- sapply(metrics, function(m) {
+    v <- sapply(res, function(r) if (is.null(r)) NA else r[[m]])
+    if (m == "method") toupper(as.character(v)) else round(as.numeric(v), 2)
+  })
+
+  # count detections
+  detection_counts <- sapply(res, function(r) {
+    if (is.null(r)) 0 else length(r$outliers)
+  })
+
+  # count unique cases (some may be flagged on multiple variables)
+  all_outlier_ids <- unique(unlist(lapply(res, function(r) {
+    if (!is.null(r)) r$ids else NULL
+  })))
+  unique_cases <- length(all_outlier_ids)
+
+  list(
+    summary = list(
+      variable = c(vars, "Total detections", "Unique cases"),
+      count = c(detection_counts, sum(detection_counts), unique_cases),
+      tbl = rbind(sum_data, NA, NA)
+    ),
+    results = res,
+    updated_data = data
+  )
+}
+```
+
+### Boxplot Visualization
+
+```{r}
+#| label: create-boxplot-function
+#| code-fold: show
+#| column: body-outset-right
+
+# create boxplot with outliers highlighted and confidence intervals
+create_boxplot <- function(data, variable, ids, mean_val, ci_lower, ci_upper) {
+  # define colors
+  ci_color <- viridis::plasma(20)[4]
+  outlier_color <- viridis::plasma(20)[12]
+  data_color <- viridis::viridis(10)[4]
+
+  mean_data <- data.frame(
+    x = factor(1), y = mean_val,
+    ymin = ci_lower, ymax = ci_upper
+  )
+
+  # set jitter position with seed for reproducibility
+  pos_jitter <- if ("seed" %in% names(formals(ggplot2::position_jitter))) {
+    ggplot2::position_jitter(width = 0.3, height = 0.25, seed = 42)
+  } else {
+    ggplot2::position_jitter(width = 0.3, height = 0.25)
+  }
+
+  ggplot2::ggplot(data, ggplot2::aes(x = factor(1), y = .data[[variable]])) +
+    ggplot2::geom_boxplot(fill = "lightgrey", alpha = 0.5, outlier.shape = NA) +
+    ggplot2::geom_point(
+      data = dplyr::filter(data, idnummer %in% ids),
+      ggplot2::aes(x = factor(1), y = .data[[variable]], color = "Outliers"),
+      size = 1
+    ) +
+    ggplot2::geom_jitter(
+      data = dplyr::filter(data, !idnummer %in% ids),
+      alpha = 0.25,
+      color = data_color,
+      position = pos_jitter,
+      show.legend = FALSE
+    ) +
+    ggplot2::geom_errorbar(
+      data = mean_data,
+      ggplot2::aes(x = x, ymin = ymin, ymax = ymax, color = "Mean (95% CI)"),
+      width = 0.12, linewidth = 1.2,
+      inherit.aes = FALSE
+    ) +
+    ggplot2::geom_point(
+      data = mean_data,
+      ggplot2::aes(x = x, y = y, color = "Mean (95% CI)"),
+      size = 2, shape = 18,
+      inherit.aes = FALSE
+    ) +
+    ggplot2::labs(title = NULL, x = NULL, y = beautify_names(variable), color = NULL) +
+    ggplot2::scale_color_manual(
+      values = c("Outliers" = outlier_color, "Mean (95% CI)" = ci_color)
+    ) +
+    garamond_theme
+}
+```
+
+## Detect Multivariate Outliers
+
+```{r}
+#| label: multivariate-outliers-function
+#| code-fold: show
+#| column: body-outset-right
+
+# detect multivariate outliers using Local Outlier Factor (LOF)
+# k is fixed at 20 to avoid the default combined-k behavior of bigutilsr::LOF,
+# which aggregates across seq_k = c(4, 10, 30) and complicates interpretation
+multivariate_outliers <- function(df, excl = NULL,
+                                  id_var = "idnummer", k = 20L) {
+  stopifnot(id_var %in% names(df))
+
+  # add row numbers for tracking
+  df_with_id <- df %>%
+    dplyr::mutate(orig_row = dplyr::row_number())
+
+  # prepare data: remove invariant columns, replace non-finite with NA
+  df_clean <- df_with_id %>%
+    remove_invariant() %>%
+    dplyr::mutate(dplyr::across(
+      dplyr::where(is.numeric),
+      ~ ifelse(is.finite(.x), .x, NA)
+    )) %>%
+    dplyr::select(dplyr::where(~ is.numeric(.x) && sd(.x, na.rm = TRUE) != 0)) %>%
+    dplyr::filter(complete.cases(.))
+
+  df_clean <- numeric_df(df_clean)
+
+  # keep id mapping separate from LOF feature set
+  id_map <- df_clean %>%
+    dplyr::select(dplyr::all_of(c(id_var, "orig_row")))
+
+  # exclude identifiers and specified variables from LOF features
+  excl_all <- unique(c(excl, id_var, "orig_row"))
+  lof_df <- df_clean %>%
+    dplyr::select(-dplyr::any_of(excl_all))
+
+  if (ncol(lof_df) == 0) {
+    stop("No numeric variables left for LOF after exclusions.")
+  }
+
+  # compute log-LOF with single, explicit k (Breunig et al., 2000).
+  # with seq_k of length 1, `combine` is irrelevant because only one score
+  # exists per observation; we keep the default `combine = max` for
+  # compatibility with bigutilsr's API.
+  llof <- bigutilsr::LOF(
+    U = as.matrix(lof_df),
+    seq_k = k,
+    log = TRUE
+  )
+
+  # Tukey's adjusted boxplot rule (skew-corrected medcouple correction) is
+  # the idiomatic bigutilsr cutoff for LOF output (see `?tukey_mc_up`).
+  # Default alpha = 0.05 controls Type-I error after multiple-testing
+  # correction; this is the canonical usage in the bigutilsr manual and is
+  # retained here rather than tightening to the legacy thresh = 0.001,
+  # which corresponds to a percentile rule, not a Type-I error.
+  lof_cutoff <- bigutilsr::tukey_mc_up(llof)
+  lof_outs_idxs <- which(llof > lof_cutoff)
+
+  # map back to original ids
+  out_rows <- id_map$orig_row[lof_outs_idxs]
+  out_ids <- id_map[[id_var]][lof_outs_idxs]
+
+  # filter out outliers by id
+  df_without_outs <- df %>%
+    dplyr::filter(!.data[[id_var]] %in% out_ids)
+
+  list(
+    df = df_without_outs,
+    llof = llof,
+    cutoff = lof_cutoff,
+    k = k,
+    id = out_ids,
+    row = out_rows,
+    n_features = ncol(lof_df),
+    features_used = names(lof_df)
+  )
+}
+```
+
+## Remove Detected Outliers
+
+### Univariate Outlier Removal
+
+```{r}
+#| label: univariate-analysis
+#| code-fold: show
+#| column: body-outset-right
+
+# detect univariate outliers
+univariate_analysis <- clean_data %>%
+  detect_outliers(
+    vars = names(univariate_targets),
+    meths = unlist(univariate_targets)
+  )
+
+# extract components
+uni_summary <- univariate_analysis$summary
+uni_results <- univariate_analysis$results
+uni_dropped <- univariate_analysis$updated_data %>%
+  dplyr::filter(!is.na(outlier))
+uni_kept <- univariate_analysis$updated_data %>%
+  dplyr::filter(is.na(outlier))
+```
+
+### Multivariate Outlier Removal
+
+```{r}
+#| label: multi-outliers
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+# identify columns to exclude from LOF based on variance/uniqueness
+cols_low_variance <- names(uni_kept)[sapply(uni_kept, function(x) {
+  is.numeric(x) && (length(unique(x)) <= 2 ||
+    length(unique(round(x))) > 0.95 * nrow(uni_kept))
+})]
+
+# partner-specific variables to exclude (structural missingness)
+# uses canonical dimension_referent naming convention
+partner_vars_exclude <- c("education_partner", "isei08_partner", "partner")
+
+# combine all exclusions
+cols_to_exclude <- unique(c(
+  cols_low_variance,
+  partner_vars_exclude[partner_vars_exclude %in% names(uni_kept)]
+))
+
+# document excluded columns
+if (length(cols_to_exclude) > 0) {
+  excluded_low_var <- cols_low_variance[cols_low_variance %in% names(uni_kept)]
+  excluded_partner <- partner_vars_exclude[partner_vars_exclude %in% names(uni_kept)]
+
+  exclusion_parts <- c()
+  if (length(excluded_low_var) > 0) {
+    exclusion_parts <- c(exclusion_parts, glue(
+      "low variance/near-constant/near-unique: {toString(dQuote(excluded_low_var, q = FALSE))}"
+    ))
+  }
+  if (length(excluded_partner) > 0) {
+    exclusion_parts <- c(exclusion_parts, glue(
+      "structural missingness (partner-specific): {toString(dQuote(excluded_partner, q = FALSE))}"
+    ))
+  }
+
+  excluded_msg <- glue(
+    "<p><strong>Note.</strong> Columns excluded from multivariate outlier detection:<br>",
+    "{paste(paste0('&bull; ', exclusion_parts), collapse = '<br>')}</p>"
+  )
+} else {
+  excluded_msg <- "<p><strong>Note.</strong> No columns were excluded from multivariate outlier detection.</p>"
+}
+cat(excluded_msg)
+
+# detect and remove multivariate outliers
+outliers_removed <- multivariate_outliers(
+  df = uni_kept,
+  excl = cols_to_exclude
+)
+
+lof_scores <- outliers_removed$llof
+lof_cutoff <- outliers_removed$cutoff
+ids_removed <- outliers_removed$id
+n_lof_features <- outliers_removed$n_features
+
+# collect multivariate outliers from original dataset
+multi_dropped <- main %>%
+  dplyr::filter(idnummer %in% ids_removed) %>%
+  dplyr::mutate(outlier = "Multivariate")
+
+# combine univariate and multivariate outliers
+cases_with_outliers <- dplyr::bind_rows(uni_dropped, multi_dropped) %>%
+  dplyr::distinct(idnummer, .keep_all = TRUE)
+
+# calculate removal counts
+rows_to_remove_uni <- nrow(uni_dropped)
+rows_to_remove_multi <- nrow(multi_dropped)
+expected_removed <- rows_to_remove_uni + rows_to_remove_multi
+actual_removed <- nrow(cases_with_outliers)
+
+# check for overlap
+overlap_count <- expected_removed - actual_removed
+if (overlap_count > 0) {
+  cat(glue(
+    "<p><strong>Note.</strong> {overlap_count} case(s) were flagged by both ",
+    "univariate and multivariate methods and are counted once in the total.</p>"
+  ))
+}
+
+cat(glue(
+  "<p><strong>LOF detection (k = {outliers_removed$k}):</strong> ",
+  "{length(ids_removed)} multivariate outlier(s) identified via Tukey's ",
+  "adjusted boxplot rule on log-LOF scores (bigutilsr::tukey_mc_up, ",
+  "default alpha = 0.05 after multiple-testing correction; ",
+  "log-LOF cutoff = {round(lof_cutoff, 3)}; max observed log-LOF = ",
+  "{round(max(lof_scores, na.rm = TRUE), 3)}).</p>"
+))
+```
+
+```{r}
+#| label: lof-features-summary
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+cat(glue(
+  "<p><strong>LOF Detection Summary:</strong> Multivariate outlier detection ",
+  "was performed using {n_lof_features} numeric features after exclusions.</p>"
+))
+```
+
+## Summarize Outlier Detection Results
+
+### Univariate Outlier Summary
+
+```{r}
+#| label: univariate-definitions-attrs
+#| code-fold: true
+#| column: body-outset-right
+
+# table metadata for univariate outlier summary
+univariate_tbl_meta <- list(
+  col_names = c(
+    "$\\ $", "$n$", "$\\text{Method}$", "$\\bar{x}$",
+    "$CI_{\\text{lower}}$", "$CI_{\\text{upper}}$",
+    "$T^{+}$", "$T^{-}$"
+  ),
+  footnote_text = glue(
+    "Outliers were detected using the Interquartile Range (IQR) ",
+    "method for DHD kcal, which identifies extreme deviations based ",
+    "on quartiles, and the Median Absolute Deviation (MAD) method ",
+    "for DHD index, emphasizing robust measures of spread. ",
+    "Threshold values $T^+$ (upper) and $T^-$ (lower) are ",
+    "calculated from these methods to classify outliers. ",
+    "'Total detections' sums all flagged values; 'Unique cases' ",
+    "counts distinct respondents (some may be flagged on multiple variables)."
+  )
+)
+
+# assign to parent frame for use by as_kable and footnote
+col_names <- univariate_tbl_meta$col_names
+footnote_text <- univariate_tbl_meta$footnote_text
+```
+
+```{r}
+#| label: tbl-univariate-outliers
+#| tbl-cap: "Number of Univariate Outliers per Variable"
+#| code-fold: show
+#| column: body-outset-right
+
+data.frame(
+  var = uni_summary$variable,
+  count = uni_summary$count
+) %>%
+  cbind(uni_summary$tbl) %>%
+  dplyr::mutate(var = beautify_names(var)) %>%
+  format_numeric() %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+### Univariate Outliers Visualization
+
+```{r}
+#| label: fig-univariate-outliers-kcal
+#| fig-cap: "DHD KCAL Outliers (IQR)"
+#| code-fold: show
+#| column: page-right
+
+if (!is.null(uni_results[["dhd_kcal"]])) {
+  print(create_boxplot(
+    data = clean_data,
+    variable = "dhd_kcal",
+    ids = uni_results[["dhd_kcal"]]$ids,
+    mean_val = uni_results[["dhd_kcal"]]$mean,
+    ci_lower = uni_results[["dhd_kcal"]]$ci_lower,
+    ci_upper = uni_results[["dhd_kcal"]]$ci_upper
+  ))
+}
+```
+
+```{r}
+#| label: fig-univariate-outliers-index
+#| fig-cap: "DHD Index Outliers (MAD)"
+#| code-fold: show
+#| column: page-right
+
+if (!is.null(uni_results[["dhd_index"]])) {
+  print(create_boxplot(
+    data = clean_data,
+    variable = "dhd_index",
+    ids = uni_results[["dhd_index"]]$ids,
+    mean_val = uni_results[["dhd_index"]]$mean,
+    ci_lower = uni_results[["dhd_index"]]$ci_lower,
+    ci_upper = uni_results[["dhd_index"]]$ci_upper
+  ))
+}
+```
+
+### Combined Outlier Cases
+
+```{r}
+#| label: combined-definitions-attrs
+#| code-fold: true
+#| column: body-outset-right
+
+footnote_text <- glue(
+  "$N_{{\\text{{total}}}} = {actual_removed}$; ",
+  "$N_{{\\text{{univariate}}}} = {rows_to_remove_uni}$; ",
+  "$N_{{\\text{{multivariate}}}} = {rows_to_remove_multi}$.<br>",
+  "Cases were excluded using two independent outlier detection approaches:<br>",
+  "1) Univariate outliers: Identified via boxplot analysis with variable-specific ",
+  "thresholds (DHD-kcal: $Q_1 - 1.5 \\times IQR$ and $Q_3 + 1.5 \\times IQR$; ",
+  "DHD-index: median $\\pm 2.5 \\times MAD$).<br>",
+  "2) Multivariate outliers: Detected using Local Outlier Factor (LOF) method ",
+  "(Tukey's adjusted boxplot cutoff on log-LOF scores) on {n_lof_features} numeric features ",
+  "with non-zero variance and complete cases. ",
+  "Partner-specific variables were excluded due to structural missingness."
+)
+```
+
+```{r}
+#| label: tbl-cases-with-outliers
+#| tbl-cap: "Cases with Univariate and Multivariate Outliers Excluded"
+#| code-fold: show
+#| column: page-right
+
+cases_with_outliers %>%
+  format_numeric(digits = 2) %>%
+  dplyr::mutate(outlier = beautify_names(outlier)) %>%
+  dplyr::mutate(
+    outlier = gsub("UniVariableiate", "Univariate", outlier, fixed = TRUE),
+    outlier = gsub("MultiVariableiate", "Multivariate", outlier, fixed = TRUE)
+  ) %>%
+  as_kable(beautify_names(names(.))) %>%
+  footnote() %>%
+  add_style()
+```
+
+## Finalize Dataset for Analysis
+
+```{r}
+#| label: final-data-preparation
+#| code-fold: show
+#| column: body-outset-right
+
+# collect all rows to remove
+all_rows_to_remove <- cases_with_outliers$idnummer
+
+# filter out outliers from main dataset
+data_without_outliers <- main %>%
+  dplyr::filter(!idnummer %in% all_rows_to_remove)
+
+# verify consistency
+rows_match <- nrow(data_without_outliers) == (nrow(main) - actual_removed)
+ids_match <- identical(
+  sort(setdiff(main$idnummer, data_without_outliers$idnummer)),
+  sort(all_rows_to_remove)
+)
+
+if (!(rows_match && ids_match)) {
+  stop("Rows removed do not match expected count.")
+}
+```
+
+```{r}
+#| label: final-data-summary
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+# generate dataset refinement summary
+overlap_text <- if (overlap_count > 0) {
+  glue(" &minus; {overlap_count} overlap")
+} else {
+  ""
+}
+
+# identify all SES-related variables present in output
+ses_vars_in_output <- c(ses_composites, partner_vars)
+ses_vars_present <- ses_vars_in_output[ses_vars_in_output %in% names(data_without_outliers)]
+
+final_summary <- glue(
+  "<div class='callout-note'>
+  <strong>Dataset Refinement Complete</strong><br><br>
+  <strong>Input:</strong> {nrow(main)} observations from Step 3<br>
+  <strong>Removed:</strong> {actual_removed} outliers ",
+  "({rows_to_remove_uni} univariate + {rows_to_remove_multi} multivariate{overlap_text})<br>
+  <strong>Output:</strong> {nrow(data_without_outliers)} observations ",
+  "({round(100 * nrow(data_without_outliers) / nrow(main), 1)}% retained)<br><br>
+  <strong>SES variables preserved:</strong><br>
+  &bull; Parental composites: <code>{paste(ses_present, collapse = '</code>, <code>')}</code><br>
+  &bull; Partner indicators: <code>{paste(structural_vars_present, collapse = '</code>, <code>')}</code>
+  </div>"
+)
+cat(final_summary)
+```
+
+### Export Refined Dataset
+
+```{r}
+#| label: final-data-export
+#| code-fold: show
+#| column: body-outset-right
+
+# save refined dataset for step 5
+haven::write_sav(
+  data_without_outliers,
+  here::here("assets", "data", "saved", "data_without_outliers.sav")
+)
+
+# export outlier case IDs for documentation
+outlier_ids_export <- cases_with_outliers %>%
+  dplyr::select(idnummer, outlier) %>%
+  dplyr::mutate(
+    outlier_type = dplyr::case_when(
+      grepl("Univariate", outlier) ~ "Univariate",
+      grepl("Multivariate", outlier) ~ "Multivariate",
+      TRUE ~ "Unknown"
+    )
+  )
+
+readr::write_csv(
+  outlier_ids_export,
+  here::here("assets", "data", "saved", "outlier_cases_removed.csv")
+)
+```
+
+## Descriptive Statistics After Outlier Removal
+
+```{r}
+#| label: descriptive-definitions-attrs
+#| code-fold: true
+#| column: body-outset-right
+
+col_names <- c(
+  "$\\ $", "$n$", "$\\bar{x}$", "$\\text{Min.}$", "$\\text{Max.}$",
+  "$SD$", "$\\text{Skewness}$", "$\\text{Kurtosis}$", "$SE$",
+  "$\\text{Normality}^{\\dagger}$"
+)
+
+footnote_text <- glue(
+  "Shapiro-Wilk Test$^{{\\dagger}}$;",
+  "values are normality test statistics (Shapiro-Wilk $W$ for $n \\leq 5000$, Lilliefors $D$ otherwise); ",
+  "smaller $W$ (larger $D$) suggests stronger departure from normality;",
+  "'&#x2014;' indicates variables with $\\leq 4$ unique values (normality test not applicable)"
+)
+```
+
+```{r}
+#| label: tbl-descriptive-stats-after-outlier-removal
+#| tbl-cap: "Descriptive Statistics After Outlier Removal"
+#| code-fold: show
+#| column: page-right
+
+data_without_outliers %>%
+  dplyr::select(-idnummer) %>%
+  setNames(beautify_names(names(.))) %>%
+  describe(
+    normality = TRUE,
+    print_only = FALSE
+  ) %>%
+  dplyr::rowwise() %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-p) %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+## Output
+
+| File                                          | Content                                                           |
+|-----------------------------------------------|-------------------------------------------------------------------|
+| `assets/data/saved/data_without_outliers.sav` | Refined dataset with univariate and multivariate outliers removed |
+| `assets/data/saved/outlier_cases_removed.csv` | ID and detection type for each excluded case                      |
+
+**Next:** [Step 5 (Missing Data Imputation)](/analysis/data/imputation/index.qmd)

@@ -1,0 +1,577 @@
+---
+title: "Initial Model Evaluation"
+subtitle: "Standard Goodness-of-Fit Metrics Without Bootstrapping"
+author: "Siard van den Bosch"
+date: 2025-03-06
+date-modified: last-modified
+---
+
+```{=html}
+<script>
+  window.config = {offset: 10};
+</script>
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+|                |         |
+| -------------- | ------- |
+| **Purpose**    | Compare goodness-of-fit metrics across unadjusted and adjusted fits. |
+| **Inputs**     | `unadjusted_fits.rds`, `adjusted_data.rds`, `adjusted_fits.rds` |
+| **Outputs**    | `fit_metrics.rds`, `nested_rlm_unadjusted.rds`, `nested_rlm_adjusted.rds`, `nested_ols_unadjusted.rds`, `nested_ols_adjusted.rds` |
+| **Method**     | Goodness-of-fit summaries; nested Wald and deviance tests |
+| **Requires**   | [Step 7 (Unadjusted Models)](/analysis/models/unadjusted/index.qmd), [Step 8 (Influence Diagnostics)](/analysis/models/assumptions/index.qmd), [Step 9 (Adjusted Models)](/analysis/models/adjusted/index.qmd) |
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+::: {.callout-note icon=false}
+## Rationale
+
+- Wald and deviance tests: standard frequentist tests for incremental fit in nested specifications [@burnham2004]
+- MM-estimation: high breakdown point combined with asymptotic efficiency [@yohai1987]
+- Model 0 retained in RLM comparisons: provides a robust-scale baseline for nested tests.
+- Model 0 excluded from OLS comparisons: variance comparisons against an intercept-only model are uninformative.
+:::
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+## Setup
+
+```{r}
+#| label: load-project-resources
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# clear environment
+rm(list = ls(envir = .GlobalEnv), envir = .GlobalEnv)
+invisible(gc(full = TRUE))
+invisible(lapply(grep(":|autoloads|globalenv", search(),
+  invert = TRUE, value = TRUE, ignore.case = TRUE
+), detach, character.only = TRUE, unload = TRUE, force = TRUE))
+
+# source custom functions (consistent with steps 7-9)
+purrr::walk(file.path(here::here("assets", "functions"), paste0(c(
+  "format_p_value", "as_kable", "named_list", "structure_models",
+  "add_style", "format_coef", "pval_str", "footnote", "sci_to_tex",
+  "import_pipes", "dim_ci_rows", "set_globals", "row_grouping",
+  "suppress_output", "beautify_names", "md_to_html", "numeric_df"
+), ".R")), source)
+
+# set global options and import pipe operators
+set_globals()
+import_pipes()
+
+# global recompute switch
+# TRUE re-runs the heavy steps; FALSE loads cached assets when they exist
+recompute_heavy <- FALSE
+```
+
+```{r}
+#| label: load-model-data
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# define input file paths
+adjusted_data_path <- here::here("assets", "data", "saved", "adjusted_data.rds")
+unadjusted_fits_path <- here::here("assets", "models", "unadjusted_fits.rds")
+adjusted_fits_path <- here::here("assets", "models", "adjusted_fits.rds")
+
+# verify input files exist
+required_files <- c(adjusted_data_path, unadjusted_fits_path, adjusted_fits_path)
+missing_files <- required_files[!file.exists(required_files)]
+if (length(missing_files) > 0) {
+  stop("Missing required input files: ", paste(basename(missing_files), collapse = ", "))
+}
+
+# define output asset paths (gated by recompute_heavy below)
+fit_metrics_path <- here::here("assets", "models", "fit_metrics.rds")
+nested_rlm_unadj_path <- here::here("assets", "models", "nested_rlm_unadjusted.rds")
+nested_rlm_adj_path <- here::here("assets", "models", "nested_rlm_adjusted.rds")
+nested_ols_unadj_path <- here::here("assets", "models", "nested_ols_unadjusted.rds")
+nested_ols_adj_path <- here::here("assets", "models", "nested_ols_adjusted.rds")
+
+# load source data from step 8 (sensitivity dataset with influential obs removed)
+source_data <- readRDS(adjusted_data_path)
+
+# load fits and structure into nested list (unadjusted/adjusted × ols/robust)
+unadjusted_fits <- readRDS(unadjusted_fits_path)
+adjusted_fits <- readRDS(adjusted_fits_path)
+model_fits <- structure_models(unadjusted_fits, adjusted_fits)
+
+# extract model ids from stored fits
+model_ids <- names(model_fits$adjusted$robust) %>%
+  stringr::str_extract("[0-9]+$") %>%
+  as.integer() %>%
+  sort()
+```
+
+```{r}
+#| label: verify-model-structure
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+# verification block to confirm step 7/9 alignment
+n_models <- length(model_ids)
+model_range <- paste0("Models ", min(model_ids), "–", max(model_ids))
+n_obs <- nrow(source_data)
+
+cat(glue(
+  "<div class='callout-note'>
+<strong>Step 7/9 Model Verification</strong><br><br>
+<strong>Models loaded:</strong> {n_models} models ({model_range})<br>
+<strong>Unadjusted fits:</strong> From Step 7 (<code>unadjusted_fits.rds</code>)<br>
+<strong>Adjusted fits:</strong> From Step 9 (<code>adjusted_fits.rds</code>)<br>
+<strong>Analysis dataset:</strong> {n_obs} observations (sensitivity sample from Step 8)<br>
+<strong>Model types:</strong> Composite (Models 0–6) and Disaggregated (Models 7–11)
+</div>"
+))
+```
+
+## Model-Hypothesis Mapping
+
+Model numbers, descriptions, and hypothesis-test mapping; see Step 7 for formula details.
+
+**Composite SES Models (Domain-Specific Parental Averages):**
+
+| Model | Description                 | Tests                     | Hypotheses  |
+| ----- | --------------------------- | ------------------------- | ----------- |
+| 0     | Null (intercept only)       | Baseline                  | —           |
+| 1     | Adult covariates + own SES  | Adjustment set            | —           |
+| 2     | + Parental SES (composite)  | Parental SES main effects | H1, RQ1     |
+| 3     | + Partner SES (composite)   | Partner SES main effects  | H2, RQ2     |
+| 4     | + Gender × SES interactions | Gender moderation         | H3, H4, RQ3 |
+| 5     | + Parental × Partner SES    | SES synergy               | H5, RQ4     |
+| 6     | + Gender × synergy          | Gender-moderated synergy  | H6, RQ4     |
+
+**Disaggregated SES Models (Separate Mother/Father/Partner Effects):**
+
+| Model | Description                          | Tests                         | Hypotheses  |
+| ----- | ------------------------------------ | ----------------------------- | ----------- |
+| 7     | Covariates + Mother SES + Father SES | Differential parental effects | H1, RQ1     |
+| 8     | + Partner SES (disaggregated)        | Partner SES main effects      | H2, RQ2     |
+| 9     | + Gender × Mother/Father/Partner SES | Gender moderation by parent   | H3, H4, RQ3 |
+| 10    | + Mother × Partner, Father × Partner | Parent-specific synergy       | H5, RQ4     |
+| 11    | + Gender × synergy terms             | Gender-moderated synergy      | H6, RQ4     |
+
+## Model Fit Statistics
+
+```{r}
+#| label: define-get-metrics
+#| message: false
+#| warning: false
+#| code-fold: true
+#| column: body-outset-right
+
+# extract goodness-of-fit metrics from model object
+get_metrics <- function(model_id, adjusted, robust, fits = model_fits) {
+  lev_type <- ifelse(adjusted, "adjusted", "unadjusted")
+  est_method <- ifelse(robust, "robust", "ols")
+  model_key <- paste0("model_", model_id)
+
+  model_fit <- fits[[lev_type]][[est_method]][[model_key]]$fit
+
+  if (!inherits(model_fit, c("lmrob", "lm"))) {
+    stop("Unsupported model class: ", class(model_fit)[1])
+  }
+
+  fit_sum <- summary(model_fit)
+  n_obs <- length(fit_sum$residuals)
+  n_params <- length(coef(model_fit)) + 1
+
+  # compute information criteria (built-in for lm, approximated for lmrob)
+  if (inherits(model_fit, "lm") && !inherits(model_fit, "lmrob")) {
+    log_lik <- logLik(model_fit)
+    aic <- AIC(model_fit)
+    bic <- BIC(model_fit)
+    rse_lbl <- "Residual_Std_Error"
+  } else {
+    # approximate log-likelihood for robust models assuming normal errors
+    log_lik <- -n_obs / 2 * (log(2 * pi) + 2 * log(fit_sum$sigma) + 1)
+    aic <- -2 * log_lik + 2 * n_params
+    bic <- -2 * log_lik + log(n_obs) * n_params
+    rse_lbl <- "Robust_RSE"
+  }
+
+  metrics <- data.frame(
+    R_squared = fit_sum$r.squared,
+    Adj_R_squared = fit_sum$adj.r.squared,
+    RSE = fit_sum$sigma,
+    AIC = aic,
+    BIC = bic
+  )
+  colnames(metrics)[3] <- rse_lbl
+
+  metrics
+}
+```
+
+```{r}
+#| label: compute-all-metrics
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# load cached metrics when available, otherwise compute the full grid
+if (!recompute_heavy && file.exists(fit_metrics_path)) {
+  metrics_df <- readRDS(fit_metrics_path)
+} else {
+  # create parameter grid for all model × leverage × method combinations
+  params <- tidyr::expand_grid(
+    model = model_ids,
+    adjusted = c(TRUE, FALSE),
+    robust = c(TRUE, FALSE)
+  )
+
+  # compute metrics for each combination
+  metrics_df <- purrr::pmap_dfr(params, function(model, adjusted, robust) {
+    met <- get_metrics(model, adjusted, robust)
+    data.frame(
+      model = model,
+      leverage = ifelse(adjusted, "Adjusted", "Unadjusted"),
+      method = ifelse(robust, "RLM", "OLS"),
+      R_squared = met$R_squared,
+      Adj_R_squared = met$Adj_R_squared,
+      RSE = met[, 3],
+      AIC = met$AIC,
+      BIC = met$BIC
+    )
+  }) %>%
+    dplyr::group_by(model, leverage) %>%
+    dplyr::mutate(
+      leverage = dplyr::if_else(dplyr::row_number() == 1,
+        stringr::str_to_title(leverage), NA_character_
+      )
+    ) %>%
+    dplyr::ungroup()
+
+  # suppress R² for intercept-only model (model 0) as it is undefined
+  r2_cols <- grepl("R_squared", names(metrics_df))
+  metrics_df[metrics_df$model == 0, r2_cols] <- NA
+
+  saveRDS(metrics_df, fit_metrics_path)
+}
+
+# create row labels for table grouping
+model_rows <- paste("Model", metrics_df$model)
+```
+
+```{r}
+#| label: model-fits-table
+#| tbl-cap: "Summary of Model Fit Statistics for All Linear Regression Models (RLM and OLS)"
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# table column names and footnote
+col_names_fits <- c(
+  "Leverage", "Method", "$R^2$", "$R^2 (adj.)$",
+  "Std. Error (RSE / Robust RSE)", "AIC", "BIC"
+)
+
+footnote_text_fits <- glue(
+  "'Leverage' indicates whether influential observations were removed (Adjusted vs. Unadjusted).",
+  "'Method' specifies estimation approach (OLS or RLM).",
+  "$R^2$ denotes coefficient of determination;",
+  "$R^2 (adj.)$ is its adjusted variant. 'Std. Error'",
+  "reports residual standard error (OLS) or",
+  "robust residual scale estimate (RLM).",
+  "AIC and BIC are Akaike and Bayesian information criteria. ",
+  "Higher $R^2$ indicates better fit;",
+  "lower AIC/BIC suggests better model performance. ",
+  "RLM AIC/BIC are normal-likelihood approximations and are not directly comparable to OLS values."
+)
+
+metrics_df %>%
+  dplyr::select(-model) %>%
+  as_kable(sci_threshold = FALSE, omit_leading_zero = TRUE, digits = 3) %>%
+  kableExtra::pack_rows(index = row_grouping(model_rows), escape = FALSE) %>%
+  footnote() %>%
+  add_style()
+```
+
+## Nested Model Comparisons
+
+```{r}
+#| label: define-compare-models
+#| message: false
+#| warning: false
+#| code-fold: true
+#| column: body-outset-right
+
+# compare two nested models using Wald and deviance tests
+compare_models <- function(mod1, mod2) {
+  extract_p_value <- function(x) {
+    pr_cols <- grep("^Pr", names(x), value = TRUE)
+    if (length(pr_cols) == 0) {
+      return(NA_real_)
+    }
+    tail(x[[pr_cols[1]]], 1)
+  }
+
+  tryCatch(
+    {
+      if (inherits(mod1, "lmrob")) {
+        wald <- anova(mod1, mod2, test = "Wald")
+        dev <- anova(mod1, mod2, test = "Deviance")
+
+        data.frame(
+          df1 = mod1$degree.freedom,
+          df2 = mod2$degree.freedom,
+          wald_stat = tail(wald$Test.Stat, 1),
+          wald_p = extract_p_value(wald),
+          deviance_stat = tail(dev$Test.Stat, 1),
+          deviance_p = extract_p_value(dev),
+          df = tail(wald$Df, 1)
+        )
+      } else {
+        wald <- lmtest::waldtest(mod1, mod2, test = "Chisq")
+        aov <- anova(mod1, mod2)
+
+        data.frame(
+          df1 = mod1$df.residual,
+          df2 = mod2$df.residual,
+          wald_stat = wald$Chisq[2],
+          wald_p = extract_p_value(wald),
+          deviance_stat = aov$F[2],
+          deviance_p = extract_p_value(aov),
+          df = aov$Df[2]
+        )
+      }
+    },
+    error = function(e) {
+      warning("Model comparison failed: ", e$message)
+      data.frame(
+        df1 = NA, df2 = NA, wald_stat = NA, wald_p = NA,
+        deviance_stat = NA, deviance_p = NA, df = NA
+      )
+    }
+  )
+}
+```
+
+```{r}
+#| label: define-compare-nested-models
+#| message: false
+#| warning: false
+#| code-fold: true
+#| column: body-outset-right
+
+# generate nested model comparison table
+compare_nested_models <- function(fits, leverage, method,
+                                  col_names = NULL, footnote_text = NULL) {
+  models <- purrr::map(fits[[leverage]][[method]], ~ .x$fit)
+
+  mn <- names(models)
+  model_nums <- as.integer(sub(".*_", "", mn))
+
+  ord <- order(model_nums)
+  models <- models[ord]
+  mn <- mn[ord]
+  model_nums <- model_nums[ord]
+
+  is_nested <- function(mod1, mod2) {
+    terms1 <- attr(terms(mod1), "term.labels")
+    terms2 <- attr(terms(mod2), "term.labels")
+    all(terms1 %in% terms2) && !setequal(terms1, terms2)
+  }
+
+  num_combs <- combn(model_nums, 2, simplify = FALSE)
+  name_combs <- combn(mn, 2, simplify = FALSE)
+
+  nested_idx <- purrr::map_lgl(name_combs, function(nv) {
+    is_nested(models[[nv[1]]], models[[nv[2]]])
+  })
+
+  num_combs <- num_combs[nested_idx]
+  name_combs <- name_combs[nested_idx]
+
+  model_pairs <- Map(
+    function(nums, nv) setNames(nums, nv),
+    num_combs, name_combs
+  )
+
+  comps <- model_pairs %>%
+    purrr::map_df(~ {
+      mod1 <- models[[names(.x)[1]]]
+      mod2 <- models[[names(.x)[2]]]
+      data.frame(
+        model_a = .x[1],
+        model_b = .x[2],
+        model_pair = sprintf("%d vs. %d", .x[1], .x[2]),
+        suppress_output(compare_models(mod1, mod2))
+      )
+    })
+
+  labs <- glue("Model {comps$model_a}")
+
+  comps %>%
+    dplyr::rowwise() %>%
+    dplyr::mutate(
+      wald_stat = format_coef(wald_stat, wald_p),
+      deviance_stat = format_coef(deviance_stat, deviance_p)
+    ) %>%
+    dplyr::ungroup() %>%
+    dplyr::select(-model_a, -model_b, -wald_p, -deviance_p) %>%
+    as_kable() %>%
+    kableExtra::pack_rows(index = row_grouping(labs), escape = FALSE) %>%
+    footnote() %>%
+    add_style()
+}
+```
+
+### Robust Linear Models (RLM)
+
+```{r}
+#| label: nested-rlm-table-attributes
+#| message: false
+#| warning: false
+#| code-fold: true
+#| column: body-outset-right
+
+# column names and footnote for RLM nested comparisons
+col_names <- c(
+  "$\\text{}$",
+  "$DF_{\\text{pseudo1}}$",
+  "$DF_{\\text{pseudo2}}$",
+  "Wald $\\chi^2$",
+  "Deviance",
+  "DF"
+)
+
+footnote_text <- glue(
+  "{pval_str(use_dot_for_0.1 = TRUE, html = FALSE)}. ",
+  "Pseudo-degrees of freedom ($DF_{{\\text{{pseudo}}}}$)",
+  "represent adjusted degrees of freedom in robust models. ",
+  "$DF_{{\\text{{pseudo1}}}}$ corresponds to the simpler model;",
+  "$DF_{{\\text{{pseudo2}}}}$ to the more complex model. ",
+  "Wald and Deviance statistics assess improvements in nested models."
+)
+```
+
+```{r}
+#| label: nested-models-rlm-unadjusted
+#| tbl-cap: "Wald and Deviance Tests for Nested Robust Linear Regression Models (Models 0–11, with influential observations)"
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+if (!recompute_heavy && file.exists(nested_rlm_unadj_path)) {
+  nested_rlm_unadjusted <- readRDS(nested_rlm_unadj_path)
+} else {
+  nested_rlm_unadjusted <- compare_nested_models(model_fits, "unadjusted", "robust")
+  saveRDS(nested_rlm_unadjusted, nested_rlm_unadj_path)
+}
+
+nested_rlm_unadjusted
+```
+
+```{r}
+#| label: nested-models-rlm-adjusted
+#| tbl-cap: "Wald and Deviance Tests for Nested Robust Linear Regression Models (Models 0–11, adjusted for influential observations)"
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+if (!recompute_heavy && file.exists(nested_rlm_adj_path)) {
+  nested_rlm_adjusted <- readRDS(nested_rlm_adj_path)
+} else {
+  nested_rlm_adjusted <- compare_nested_models(model_fits, "adjusted", "robust")
+  saveRDS(nested_rlm_adjusted, nested_rlm_adj_path)
+}
+
+nested_rlm_adjusted
+```
+
+### OLS Models
+
+```{r}
+#| label: nested-ols-table-attributes
+#| message: false
+#| warning: false
+#| code-fold: true
+#| column: body-outset-right
+
+# column names and footnote for OLS nested comparisons
+col_names <- c(
+  "$\\text{}$",
+  "$DF_{\\text{resid1}}$",
+  "$DF_{\\text{resid2}}$",
+  "Wald $\\chi^2$",
+  "F",
+  "DF"
+)
+
+footnote_text <- glue(
+  "{pval_str(use_dot_for_0.1 = TRUE, html = FALSE)}. ",
+  "$DF_{{\\text{{resid}}}}$ are residual degrees of freedom. ",
+  "Wald $\\chi^2$ from `lmtest::waldtest()`. F statistic from `anova()`. ",
+  "DF reports difference in degrees of freedom between models."
+)
+```
+
+```{r}
+#| label: nested-models-ols-unadjusted
+#| tbl-cap: "Wald and Explained Variance Tests for Nested OLS Linear Regression Models (Models 1–11, with influential observations)"
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# exclude model 0 (intercept-only) from OLS comparisons
+if (!recompute_heavy && file.exists(nested_ols_unadj_path)) {
+  nested_ols_unadjusted <- readRDS(nested_ols_unadj_path)
+} else {
+  nested_ols_unadjusted <- purrr::map_depth(model_fits, 2, ~ .x[-1]) %>%
+    compare_nested_models("unadjusted", "ols")
+  saveRDS(nested_ols_unadjusted, nested_ols_unadj_path)
+}
+
+nested_ols_unadjusted
+```
+
+```{r}
+#| label: nested-models-ols-adjusted
+#| tbl-cap: "Wald and Explained Variance Tests for Nested OLS Linear Regression Models (Models 1–11, adjusted for influential observations)"
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# exclude model 0 (intercept-only) from OLS comparisons
+if (!recompute_heavy && file.exists(nested_ols_adj_path)) {
+  nested_ols_adjusted <- readRDS(nested_ols_adj_path)
+} else {
+  nested_ols_adjusted <- purrr::map_depth(model_fits, 2, ~ .x[-1]) %>%
+    compare_nested_models("adjusted", "ols")
+  saveRDS(nested_ols_adjusted, nested_ols_adj_path)
+}
+
+nested_ols_adjusted
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+## Output
+
+| File   |                    | Content                                                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `fit_metrics.rds`           | Goodness-of-fit grid (R², adjusted R², RSE, AIC, BIC) across all model × leverage × method combinations. |
+| `nested_rlm_unadjusted.rds` | Rendered Wald/deviance nested-comparison table, robust models, with influential observations.            |
+| `nested_rlm_adjusted.rds`   | Rendered Wald/deviance nested-comparison table, robust models, influential observations removed.         |
+| `nested_ols_unadjusted.rds` | Rendered Wald/F nested-comparison table, OLS models, with influential observations.                      |
+| `nested_ols_adjusted.rds`   | Rendered Wald/F nested-comparison table, OLS models, influential observations removed.                   |
+
+**Next:** [Step 11 (Interaction Effects)](/analysis/models/goodness-of-fit/interaction-effects/index.qmd)

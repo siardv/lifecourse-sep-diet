@@ -1,0 +1,934 @@
+<script>
+  function updateFooter(tfoot) {
+    const td = tfoot.querySelector("td");
+    if (td) {
+      tfoot.innerHTML = `<td colspan="100%" style="text-align: left;">${td.innerHTML}</td>`;
+    }
+    tfoot.style.fontSize = "0.9em";
+  }
+
+  function setClassToString() {
+    document.querySelectorAll(".sc.slash").forEach((element) => {
+      element.classList.replace("sc", "st");
+    });
+
+    // fix escaped quotes and special characters inside strings
+    // these are marked as 'sc' by pandoc but should be styled as strings
+    document.querySelectorAll("code.sourceCode .sc").forEach((element) => {
+      const text = element.textContent;
+      // check if this is an escape sequence that should be part of a string
+      if (
+        text === '\\"' ||
+        text === "\\'" ||
+        text === "\\\\" ||
+        (text.startsWith("\\") &&
+          element.previousElementSibling?.classList.contains("st"))
+      ) {
+        element.classList.add("st");
+        element.classList.remove("sc");
+      }
+      // also check if surrounded by string elements
+      const prev = element.previousElementSibling;
+      const next = element.nextElementSibling;
+      if (
+        (prev?.classList.contains("st") || next?.classList.contains("st")) &&
+        text.startsWith("\\")
+      ) {
+        element.classList.add("st");
+        element.classList.remove("sc");
+      }
+    });
+  }
+
+  function wrapOperatorsInSpans() {
+    function isInsideStringOrComment(node) {
+      let parent = node.parentElement;
+      while (parent && parent.tagName !== "CODE") {
+        if (
+          parent.classList.contains("st") ||
+          parent.classList.contains("co")
+        ) {
+          return true;
+        }
+        parent = parent.parentElement;
+      }
+      return false;
+    }
+
+    function processTextNode(textNode) {
+      if (isInsideStringOrComment(textNode)) {
+        return;
+      }
+
+      const text = textNode.textContent;
+      if (!text.includes("=") && !text.includes("&")) {
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      let lastIndex = 0;
+
+      // match: && first, then standalone & (not part of &&), then standalone =
+      const regex = /(&&)|(&(?!&))|((?<![=!<>:])=(?!=))/g;
+      let match;
+
+      while ((match = regex.exec(text)) !== null) {
+        if (lastIndex < match.index) {
+          fragment.appendChild(
+            document.createTextNode(text.slice(lastIndex, match.index)),
+          );
+        }
+        const span = document.createElement("span");
+        if (match[1]) {
+          span.className = "logicaland";
+        } else if (match[2]) {
+          span.className = "ampersand";
+        } else {
+          span.className = "equals";
+        }
+        span.textContent = match[0];
+        fragment.appendChild(span);
+        lastIndex = match.index + match[0].length;
+      }
+
+      if (lastIndex > 0) {
+        if (lastIndex < text.length) {
+          fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+        }
+        textNode.parentNode.replaceChild(fragment, textNode);
+      }
+    }
+
+    document.querySelectorAll("code.sourceCode.r").forEach((code) => {
+      const walker = document.createTreeWalker(
+        code,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false,
+      );
+
+      const textNodes = [];
+      while (walker.nextNode()) {
+        textNodes.push(walker.currentNode);
+      }
+
+      textNodes.forEach(processTextNode);
+    });
+  }
+
+  function hideCodeBlocksStartingWith(searchText) {
+    if (!searchText || typeof searchText !== "string") {
+      console.error("Invalid searchText: must be a non-empty string.");
+      return;
+    }
+
+    const codeBlocks = document.querySelectorAll("code");
+    codeBlocks.forEach((codeBlock) => {
+      if (codeBlock.textContent.trim().startsWith(searchText)) {
+        codeBlock.style.display = "none";
+      }
+    });
+  }
+
+  function injectFigcaptionStyleInline() {
+    const figcaptions = document.querySelectorAll("figcaption");
+    figcaptions.forEach((element) => {
+      element.style.fontSize = "1.0em";
+      element.style.fontStyle = "italic";
+      element.style.textAlign = "center";
+    });
+  }
+
+  function openLinksInNewTab() {
+    document.querySelectorAll("a[href]").forEach((link) => {
+      const href = link.getAttribute("href");
+      // keep in-page anchors (toc, footnotes, citations, code-line
+      // numbers), script links, and bootstrap toggles in the same tab
+      if (
+        href.startsWith("#") ||
+        href.startsWith("javascript:") ||
+        link.hasAttribute("data-bs-toggle")
+      ) {
+        return;
+      }
+      link.setAttribute("target", "_blank");
+      link.setAttribute("rel", "noopener noreferrer");
+    });
+  }
+
+  function adjustLastCells() {
+    const panels = document.querySelectorAll("[class*=quarto-layout-panel]");
+    panels.forEach((panel) => {
+      const lastCell = [...panel.querySelectorAll(".quarto-layout-cell")].pop();
+      if (lastCell) {
+        const figcaption = document.createElement("figcaption");
+        figcaption.innerHTML = lastCell.innerHTML;
+        figcaption.style.fontSize = "1.0em";
+        figcaption.style.fontStyle = "italic";
+        figcaption.style.textAlign = "center";
+        lastCell.innerHTML = "";
+        lastCell.appendChild(figcaption);
+      }
+    });
+  }
+
+  function setHeaderNumbering() {
+    // pages define window.config inline; guard so its absence
+    // cannot throw and abort the remaining initialization
+    if (window.config?.offset === undefined) {
+      return;
+    }
+
+    // fix main content headers - exclude toc-title
+    document
+      .querySelectorAll("h1, h2, h3, h4, h5, h6")
+      .forEach((headerElement) => {
+        // skip the TOC title
+        if (headerElement.id === "toc-title") {
+          return;
+        }
+
+        let sectionNumber = headerElement.getAttribute("data-number");
+
+        if (!sectionNumber) {
+          let autoNumber =
+            Array.from(headerElement.parentNode.children)
+              .filter((el) => el.tagName.match(/^H[1-6]$/))
+              .indexOf(headerElement) + 1;
+
+          sectionNumber = autoNumber.toString();
+          headerElement.setAttribute("data-number", sectionNumber);
+        }
+
+        let sectionSpan = headerElement.querySelector(".header-section-number");
+        if (!sectionSpan) {
+          sectionSpan = document.createElement("span");
+          sectionSpan.classList.add("header-section-number");
+          headerElement.prepend(sectionSpan);
+        }
+
+        const level = parseInt(headerElement.tagName.substring(1));
+        const baseParts = sectionNumber
+          .split(".")
+          .slice(0, level === 1 ? 0 : level - 1)
+          .join(".");
+
+        sectionSpan.innerHTML =
+          level === 1
+            ? `${window.config.offset}.&nbsp;`
+            : `${window.config.offset}.${baseParts}`;
+      });
+
+    // fix sidebar TOC entries - prepend offset, don't replace
+    document.querySelectorAll("#TOC .header-section-number").forEach((span) => {
+      const original = span.textContent.trim();
+      if (!original) return;
+
+      span.textContent = `${window.config.offset}.${original}`;
+    });
+  }
+
+  function applyHeaderTheme() {
+    // paper-like masthead: white ground, single hairline rule, ink-on-paper
+    // text, quiet hover underlines; overrides bootstrap's navbar variables
+    if (document.getElementById("header-theme-style")) return;
+
+    // dark-stroke toggler icon (the markup may carry data-bs-theme="dark",
+    // which would otherwise draw white lines on the white header)
+    const togglerIcon =
+      `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' ` +
+      `viewBox='0 0 30 30'%3e%3cpath stroke='rgba%280, 0, 0, 0.6%29' ` +
+      `stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' ` +
+      `d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e")`;
+
+    const style = document.createElement("style");
+    style.id = "header-theme-style";
+    style.textContent = `
+      #quarto-header {
+        box-shadow: none !important;
+      }
+      #quarto-header .navbar {
+        --bs-navbar-color: rgba(0, 0, 0, .62);
+        --bs-navbar-hover-color: rgba(0, 0, 0, .95);
+        --bs-navbar-active-color: rgba(0, 0, 0, .95);
+        --bs-navbar-disabled-color: rgba(0, 0, 0, .3);
+        --bs-navbar-brand-color: rgba(0, 0, 0, .85);
+        --bs-navbar-brand-hover-color: rgba(0, 0, 0, .95);
+        --bs-navbar-toggler-border-color: transparent;
+        --bs-navbar-toggler-icon-bg: ${togglerIcon};
+        background: #fff;
+        border-bottom: 1px solid rgba(0, 0, 0, .12);
+        box-shadow: none;
+        padding-block: .45rem;
+      }
+
+      /* brand as a small-caps masthead title */
+      #quarto-header .navbar-brand {
+        font-size: 1.05rem;
+        font-variant: small-caps;
+        letter-spacing: .04em;
+        text-decoration: none;
+      }
+
+      /* menu links: even rhythm, slight tracking, no boxes */
+      #quarto-header .navbar-nav .nav-link {
+        font-size: .95rem;
+        letter-spacing: .01em;
+        padding-block: .3rem;
+      }
+      #quarto-header .navbar-nav .nav-link:hover,
+      #quarto-header .navbar-nav .nav-link:focus-visible {
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: .4em;
+        text-decoration-color: rgba(0, 0, 0, .35);
+      }
+
+      /* numbering prefixes recede behind the labels */
+      #quarto-header .nav-number {
+        color: rgba(0, 0, 0, .45);
+        font-variant-numeric: oldstyle-nums;
+      }
+
+      /* smaller, fainter dropdown caret */
+      #quarto-header .navbar .dropdown-toggle::after {
+        border-top-width: .26em;
+        border-right-width: .26em;
+        border-left-width: .26em;
+        vertical-align: .14em;
+        margin-left: .32em;
+        opacity: .5;
+      }
+
+      /* dropdowns: flat white panels with a hairline edge */
+      #quarto-header .navbar .dropdown-menu {
+        --bs-dropdown-bg: #fff;
+        --bs-dropdown-color: rgba(0, 0, 0, .7);
+        --bs-dropdown-link-color: rgba(0, 0, 0, .7);
+        --bs-dropdown-link-hover-color: rgba(0, 0, 0, .95);
+        --bs-dropdown-link-hover-bg: rgba(0, 0, 0, .04);
+        --bs-dropdown-link-active-color: rgba(0, 0, 0, .95);
+        --bs-dropdown-link-active-bg: rgba(0, 0, 0, .06);
+        --bs-dropdown-border-color: rgba(0, 0, 0, .12);
+        --bs-dropdown-border-radius: 0;
+        background: #fff;
+        border: 1px solid rgba(0, 0, 0, .12);
+        border-radius: 0;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, .06);
+        padding-block: .35rem;
+        font-size: .95rem;
+        min-width: 15rem;
+      }
+      #quarto-header .navbar .dropdown-item {
+        padding: .4rem 1.1rem;
+      }
+
+      /* secondary (breadcrumb) bar follows the same idiom */
+      #quarto-header .quarto-secondary-nav {
+        background: #fff;
+        border-bottom: 1px solid rgba(0, 0, 0, .08);
+      }
+      #quarto-header .quarto-secondary-nav .quarto-btn-toggle {
+        color: rgba(0, 0, 0, .6);
+      }
+      #quarto-header .quarto-page-breadcrumbs .breadcrumb {
+        --bs-breadcrumb-divider-color: rgba(0, 0, 0, .45);
+        margin-bottom: 0;
+      }
+      #quarto-header .quarto-page-breadcrumbs .breadcrumb-item {
+        font-size: .9rem;
+        font-style: italic;
+        color: rgba(0, 0, 0, .55);
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function numberNavbarItems() {
+    // pass 1: leaf links (top-level direct links + dropdown entries).
+    // document order == navbar order == _quarto.yml order.
+    const leaves = document.querySelectorAll(
+      "#quarto-header .navbar a.nav-link:not(.dropdown-toggle), " +
+        "#quarto-header .navbar a.dropdown-item",
+    );
+    leaves.forEach((link, i) => {
+      let tag = link.querySelector(".nav-number");
+      if (!tag) {
+        tag = document.createElement("span");
+        tag.className = "nav-number";
+        link.prepend(tag);
+      }
+      tag.textContent = `${i + 1}. `;
+    });
+
+    // pass 2: parents report the range of their children's numbers.
+    document
+      .querySelectorAll("#quarto-header .navbar a.dropdown-toggle")
+      .forEach((toggle) => {
+        const item = toggle.closest(".nav-item");
+        const nums = [...item.querySelectorAll(".dropdown-menu .nav-number")]
+          .map((n) => parseInt(n.textContent, 10))
+          .filter((n) => !isNaN(n));
+        if (nums.length === 0) return;
+
+        const lo = Math.min(...nums);
+        const hi = Math.max(...nums);
+
+        let tag = toggle.querySelector(".nav-number");
+        if (!tag) {
+          tag = document.createElement("span");
+          tag.className = "nav-number nav-number-group";
+          toggle.prepend(tag);
+        }
+        tag.textContent = lo === hi ? `${lo}. ` : `${lo}–${hi}. `;
+      });
+  }
+
+  function setStepIndicator() {
+    // navbar is pinned (_quarto.yml: navbar.pinned), so the current step
+    // sits on the left, beside the brand; menu items move to the right
+    const slot = document.querySelector(".quarto-navbar-tools");
+    const step = document.querySelector("h1.title")?.textContent.trim();
+    if (!slot || !step) return;
+
+    // scoped styles, injected once
+    if (!document.getElementById("step-indicator-style")) {
+      const style = document.createElement("style");
+      style.id = "step-indicator-style";
+      style.textContent = `
+        /* desktop: brand + step on the left, menu on the right */
+        @media (min-width: 992px) {
+          #quarto-header .navbar-brand-container { order: 0; margin: 0 !important; }
+          #quarto-header .quarto-navbar-tools {
+            order: 1;
+            display: flex;
+            align-items: center;
+          }
+          #quarto-header #navbarCollapse { order: 2; }
+          #quarto-header #navbarCollapse .navbar-nav {
+            margin-left: auto !important;
+            margin-right: 0 !important;
+          }
+        }
+        /* running-head style: italic, muted, set off by a middot */
+        .quarto-navbar-tools .step-name {
+          display: inline-block;
+          min-width: 0;
+          max-width: min(52ch, 38vw);
+          margin-inline-start: .65rem;
+          font-family: inherit;
+          font-size: .95rem;
+          font-style: italic;
+          font-weight: 400;
+          line-height: 1.25;
+          color: rgba(0, 0, 0, .55);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          vertical-align: middle;
+          user-select: none;
+        }
+        .quarto-navbar-tools .step-name::before {
+          content: "\\00B7";
+          margin-inline-end: .65rem;
+          font-style: normal;
+          color: rgba(0, 0, 0, .35);
+        }
+        @media (max-width: 991.98px) {
+          .quarto-navbar-tools .step-name { display: none; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    slot.innerHTML = `<span class="step-name"></span>`;
+    slot.querySelector(".step-name").textContent = step;
+  }
+
+  function fixAllPanelsCellFlexBasis() {
+    const panels = document.querySelectorAll(".quarto-layout-panel");
+    panels.forEach((panel) => {
+      const cells = panel.querySelectorAll(".quarto-layout-cell");
+      if (cells.length > 0) {
+        const referenceCell = cells[0];
+        const referenceFlexBasis =
+          window.getComputedStyle(referenceCell).flexBasis;
+        const lastCell = cells[cells.length - 1];
+        lastCell.style.flexBasis = referenceFlexBasis;
+      }
+    });
+  }
+
+  function moveLastFigCaption() {
+    const panels = document.querySelectorAll(".quarto-layout-panel");
+    panels.forEach((panel) => {
+      const rows = panel.querySelectorAll(".quarto-layout-row");
+      if (rows.length === 0) {
+        return;
+      }
+      const lastRow = rows[rows.length - 1];
+      const figCaptions = panel.querySelectorAll("figcaption");
+      if (figCaptions.length === 0) {
+        return;
+      }
+      const lastFigCaption = figCaptions[figCaptions.length - 1];
+      lastRow.insertAdjacentElement("afterend", lastFigCaption);
+    });
+  }
+
+  function styleAllCaptions() {
+    const captions = document.querySelectorAll("caption");
+    captions.forEach((caption) => {
+      caption.style.fontSize = "1.1em";
+      caption.style.fontStyle = "italic";
+    });
+  }
+
+  function adjustFooter() {
+    document.querySelectorAll("tfoot").forEach(updateFooter);
+  }
+
+  function styleTables(selector, maxWidth) {
+    document.querySelectorAll(selector).forEach((element) => {
+      element.style.maxWidth = maxWidth;
+      element.style.margin = "0 auto";
+    });
+  }
+
+  function replaceNAWithEmDash() {
+    document.querySelectorAll("td").forEach((td) => {
+      if (td.textContent.trim() === "NA") {
+        td.textContent = "—";
+      }
+    });
+  }
+
+  function formatAllCodeBlocks() {
+    const keywords = [
+      { text: "{", newClass: "curlybracket" },
+      { text: "}", newClass: "curlybracket" },
+      { text: "[[", newClass: "squarebracket" },
+      { text: "[", newClass: "squarebracket" },
+      { text: "]", newClass: "squarebracket" },
+      { text: "%>%", newClass: "pipe" },
+      { text: "%<>%", newClass: "pipe" },
+      { text: "%$%", newClass: "pipe" },
+      { text: "%T>%", newClass: "pipe" },
+      { text: "%s+%", newClass: "pipe" },
+      { text: "%||%", newClass: "pipe" },
+      { text: "%in%", newClass: "pipe" },
+      { text: "%dopar%", newClass: "pipe" },
+      { text: "`%>%`", newClass: "tickmark" },
+      { text: "`%<>%`", newClass: "tickmark" },
+      { text: "`%$%`", newClass: "tickmark" },
+      { text: "`%T>%`", newClass: "tickmark" },
+      { text: "`%s+%`", newClass: "tickmark" },
+      { text: "`%||%`", newClass: "tickmark" },
+      { text: "`%dopar%`", newClass: "tickmark" },
+      { text: "$", newClass: "dollarsign" },
+      { text: "function", newClass: "function" },
+      { text: "source", newClass: "source" },
+      { text: ",", newClass: "comma" },
+      { text: "::", newClass: "doublecolon" },
+      { text: "else", newClass: "else" },
+      { text: "if", newClass: "if" },
+      { text: "~", newClass: "tilde" },
+      { text: "=", newClass: "equals" },
+      { text: ":=", newClass: "equals" },
+      { text: "==", newClass: "equals" },
+      { text: "&&", newClass: "logicaland" },
+      { text: "&", newClass: "ampersand" },
+      { text: "-", newClass: "minus" },
+      { text: "+", newClass: "plus" },
+      { text: "/", newClass: "slash" },
+      { text: "\\", newClass: "slash" },
+      { text: "\\\\", newClass: "slash" },
+      { text: "`", newClass: "tickmark" },
+      { text: "*", newClass: "asterisk" },
+    ];
+
+    document.querySelectorAll("pre").forEach((pre) => {
+      pre.style.setProperty("line-height", "normal", "important");
+      const codeElement = pre.querySelector("code");
+      if (codeElement) {
+        codeElement.querySelectorAll("span").forEach((line) => {
+          // skip comments and strings - preserve their original styling
+          if (line.classList.contains("co") || line.classList.contains("st")) {
+            return;
+          }
+          const trimmedText = line.textContent.trim();
+          const keyword = keywords.find(
+            (k) =>
+              k.text === trimmedText ||
+              (trimmedText.startsWith(k.text) && trimmedText.endsWith(k.text)),
+          );
+          if (keyword) {
+            line.classList.add(keyword.newClass);
+          }
+        });
+      }
+    });
+
+    document.querySelectorAll("pre > code").forEach((codeBlock) => {
+      const patterns = [
+        {
+          regex:
+            /([a-zA-Z0-9]+)(<span class="[sc ]{0,3}doublecolon">::<\/span>)/g,
+          replacement: '<span class="package">$1</span>$2',
+        },
+        {
+          regex: /(<\/span>)(\s?)(\[)(\s?)/g,
+          replacement: '$1<span class="squarebracket">$2$3</span>$4',
+        },
+        {
+          regex: /([a-z]+)(\s?)(\[)(\s?)/g,
+          replacement: '$1<span class="squarebracket">$2$3</span>$4',
+        },
+        {
+          regex: /(<\/span>)(\s?)(\])(\s?)/g,
+          replacement: '$1<span class="squarebracket">$2$3</span>$4',
+        },
+        // handle closing curly brackets after '>' (with optional whitespace)
+        {
+          regex: /(>)(\s*)(\})(\s*)/g,
+          replacement: '$1<span class="curlybracket">$2$3</span>$4',
+        },
+        // handle opening curly brackets after '</span>' (with optional whitespace)
+        {
+          regex: /(<\/span>)(\s*)(\{)(\s*)/g,
+          replacement: '$1<span class="curlybracket">$2$3</span>$4',
+        },
+        // general patterns for square brackets
+        {
+          regex: /\[/g,
+          replacement: '<span class="squarebracket">[</span>',
+        },
+        {
+          regex: /\]/g,
+          replacement: '<span class="squarebracket">]</span>',
+        },
+        // add general patterns for all remaining curly brackets
+        {
+          regex: /\{/g,
+          replacement: '<span class="curlybracket">{</span>',
+        },
+        {
+          regex: /\}/g,
+          replacement: '<span class="curlybracket">}</span>',
+        },
+      ];
+
+      patterns.forEach(({ regex, replacement }) => {
+        codeBlock.innerHTML = codeBlock.innerHTML.replace(regex, replacement);
+      });
+    });
+
+    document.querySelectorAll("code.sourceCode.r").forEach((code) => {
+      processCodeBlock(code);
+    });
+
+    function processCodeBlock(node) {
+      Array.from(node.childNodes).forEach((child) => {
+        if (child.nodeType === Node.TEXT_NODE) {
+          const wrappedNodes = wrapBracketsInSpans(child.textContent);
+          if (wrappedNodes.length) {
+            wrappedNodes.forEach((newNode) =>
+              node.insertBefore(newNode, child),
+            );
+            node.removeChild(child);
+          }
+        } else if (child.nodeType === Node.ELEMENT_NODE) {
+          // skip processing brackets inside comments or strings
+          if (
+            child.classList.contains("co") ||
+            child.classList.contains("st")
+          ) {
+            return;
+          }
+          processCodeBlock(child);
+        }
+      });
+    }
+
+    function wrapBracketsInSpans(text) {
+      const fragment = document.createDocumentFragment();
+      let lastIndex = 0;
+
+      text.replace(/([()])/g, (match, bracket, index) => {
+        if (lastIndex < index) {
+          fragment.appendChild(
+            document.createTextNode(text.slice(lastIndex, index)),
+          );
+        }
+        const span = document.createElement("span");
+        span.className = bracket === "(" ? "bracketopen" : "bracketclose";
+        span.textContent = bracket;
+        fragment.appendChild(span);
+        lastIndex = index + 1;
+      });
+
+      if (lastIndex < text.length) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+      }
+
+      return Array.from(fragment.childNodes);
+    }
+
+    document.querySelectorAll("pre code").forEach((codeBlock) => {
+      const fragment = document.createDocumentFragment();
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = codeBlock.innerHTML;
+
+      function processNode(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const newContent = document.createDocumentFragment();
+          node.textContent.split(",").forEach((part, index, array) => {
+            newContent.appendChild(document.createTextNode(part));
+            if (index < array.length - 1) {
+              const commaSpan = document.createElement("span");
+              commaSpan.textContent = ",";
+              commaSpan.className = "comma";
+              newContent.appendChild(commaSpan);
+            }
+          });
+          return newContent;
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+          const clone = node.cloneNode(false);
+          // skip processing inside strings and comments
+          if (node.className.includes("st") || node.className.includes("co")) {
+            clone.textContent = node.textContent;
+          } else {
+            for (let child of node.childNodes) {
+              clone.appendChild(processNode(child));
+            }
+          }
+          return clone;
+        }
+        return node.cloneNode(true);
+      }
+
+      for (let child of tempDiv.childNodes) {
+        fragment.appendChild(processNode(child));
+      }
+      codeBlock.innerHTML = "";
+      codeBlock.appendChild(fragment);
+    });
+  }
+
+  function attachCodeToggleHandlers() {
+    const hideBtn = document.getElementById("quarto-hide-all-code");
+    const showBtn = document.getElementById("quarto-show-all-code");
+
+    function toggleAllCode(show) {
+      document
+        .querySelectorAll("details.code-fold")
+        .forEach((d) => (d.open = show));
+    }
+
+    if (hideBtn) hideBtn.addEventListener("click", () => toggleAllCode(false));
+    if (showBtn) showBtn.addEventListener("click", () => toggleAllCode(true));
+  }
+
+  function wrapCodeFoldInCell() {
+    // convert any cell with column-page-right to column-body-outset-right
+    // (only for cells that directly contain code, not table outputs)
+    document.querySelectorAll(".cell.column-page-right").forEach((cell) => {
+      // only convert if this cell contains code (details.code-fold or .code-copy-outer-scaffold)
+      if (
+        cell.querySelector(
+          ":scope > details.code-fold, :scope > .code-copy-outer-scaffold",
+        )
+      ) {
+        cell.classList.remove("column-page-right");
+        cell.classList.add("column-body-outset-right");
+      }
+    });
+
+    // find all details.code-fold that need wrapping
+    document.querySelectorAll("details.code-fold").forEach((details) => {
+      const parent = details.parentElement;
+
+      // skip if already properly wrapped
+      if (parent.classList.contains("column-body-outset-right")) {
+        return;
+      }
+
+      // wrap it
+      const wrapper = document.createElement("div");
+      wrapper.className = "cell column-body-outset-right";
+      details.parentNode.insertBefore(wrapper, details);
+      wrapper.appendChild(details);
+    });
+
+    // same for .code-copy-outer-scaffold without details wrapper
+    document
+      .querySelectorAll(".code-copy-outer-scaffold")
+      .forEach((scaffold) => {
+        // skip if inside details (already handled above)
+        if (scaffold.closest("details.code-fold")) return;
+
+        const parent = scaffold.parentElement;
+
+        // skip if already properly wrapped
+        if (parent.classList.contains("column-body-outset-right")) {
+          return;
+        }
+
+        // wrap it
+        const wrapper = document.createElement("div");
+        wrapper.className = "cell column-body-outset-right";
+        scaffold.parentNode.insertBefore(wrapper, scaffold);
+        wrapper.appendChild(scaffold);
+      });
+  }
+
+  function scrollActivityBackToTop(retriesLeft = 25) {
+    const btn =
+      document.getElementById("quarto-back-to-top") ||
+      document.querySelector(".back-to-top, [aria-label='Back to top']");
+    if (!btn) {
+      // element may not be injected yet; retry briefly, then give up
+      if (retriesLeft > 0) {
+        setTimeout(() => scrollActivityBackToTop(retriesLeft - 1), 200);
+      }
+      return;
+    }
+
+    // take visibility away from quarto's position-based display logic
+    const style = document.createElement("style");
+    style.textContent = `
+    #quarto-back-to-top {
+      display: block !important;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+      pointer-events: none;
+    }
+    #quarto-back-to-top.scroll-active {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+  `;
+    document.head.appendChild(style);
+
+    let hideTimer = null;
+    const hideDelay = 700; // ms of no scrolling before it fades out
+
+    window.addEventListener(
+      "scroll",
+      () => {
+        btn.classList.add("scroll-active");
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => {
+          btn.classList.remove("scroll-active");
+        }, hideDelay);
+      },
+      { passive: true },
+    );
+  }
+
+  function initializeFeatures() {
+    // run each step in isolation so a failure in one feature
+    // cannot abort the remaining initialization
+    const run = (label, fn) => {
+      try {
+        fn();
+      } catch (err) {
+        console.error(`utilities.html: ${label} failed`, err);
+      }
+    };
+
+    run("tableFooters", () => {
+      document.querySelectorAll("tfoot").forEach((tfoot) => {
+        updateFooter(tfoot);
+        new MutationObserver((mutations) => {
+          if (
+            mutations.some(
+              (m) => m.type === "attributes" && m.attributeName === "colspan",
+            )
+          ) {
+            updateFooter(tfoot);
+          }
+        }).observe(tfoot, {
+          attributes: true,
+          subtree: true,
+          attributeFilter: ["colspan"],
+        });
+      });
+
+      document.addEventListener("click", (event) => {
+        if (event.target.matches("[class*=paginate_button]")) {
+          adjustFooter();
+        }
+      });
+    });
+
+    run("styleTables", () => {
+      styleTables(".table-max-450 table", "450px");
+      styleTables(".table-max-550 table", "550px");
+    });
+    run("replaceNAWithEmDash", replaceNAWithEmDash);
+    run("injectFigcaptionStyleInline", injectFigcaptionStyleInline);
+    run("adjustLastCells", adjustLastCells);
+    run("styleAllCaptions", styleAllCaptions);
+    run("formatAllCodeBlocks", formatAllCodeBlocks);
+    run("fixAllPanelsCellFlexBasis", fixAllPanelsCellFlexBasis);
+    run("moveLastFigCaption", moveLastFigCaption);
+    run("setHeaderNumbering", setHeaderNumbering);
+    run("applyHeaderTheme", applyHeaderTheme);
+    run("numberNavbarItems", numberNavbarItems);
+    run("setStepIndicator", setStepIndicator);
+    run("openLinksInNewTab", openLinksInNewTab);
+    run("hideCodeBlocks", () => hideCodeBlocksStartingWith("Styling"));
+    run("setClassToString", setClassToString);
+    run("wrapOperatorsInSpans", wrapOperatorsInSpans);
+    run("attachCodeToggleHandlers", attachCodeToggleHandlers);
+    run("wrapCodeFoldInCell", wrapCodeFoldInCell);
+    run("scrollActivityBackToTop", scrollActivityBackToTop);
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    initializeFeatures();
+    document
+      .querySelectorAll('[href*="#cb"]')
+      .forEach((i) => (i.style.color = "#c5c8c6"));
+
+    // auto-toggle the first collapsible note callout once the tab has
+    // been visible for a second; skip entirely when none exists
+    const hasCollapsibleCallout = document.querySelector(
+      '[class*=callout-note] [data-bs-toggle="collapse"]',
+    );
+    if (!hasCollapsibleCallout) return;
+
+    let visibilityTimer = null;
+    let hasTriggered = false;
+
+    const triggerCollapse = () => {
+      if (hasTriggered) return;
+
+      const callout = document.querySelector("[class*=callout-note]");
+      const toggle = callout?.querySelector('[data-bs-toggle="collapse"]');
+
+      if (toggle) {
+        toggle.click();
+        hasTriggered = true;
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        visibilityTimer = setTimeout(triggerCollapse, 1000);
+      } else {
+        clearTimeout(visibilityTimer);
+      }
+    };
+
+    if (document.visibilityState === "visible") {
+      visibilityTimer = setTimeout(triggerCollapse, 1000);
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+  });
+</script>

@@ -1,0 +1,786 @@
+---
+title: "Unadjusted Regression Models"
+subtitle: "Baseline MM-Estimation Fits Before Outlier Adjustment"
+author: "Siard van den Bosch"
+date: 2024-12-15
+date-modified: last-modified
+---
+
+```{=html}
+<script>
+  window.config = {offset: 7};
+</script>
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+|                |         |
+| -------------- | ------- |
+| **Purpose**    | Produce baseline MM-estimation fits for Models 0–11 on the full sample |
+| **Inputs**     | `analysis_ready.sav` |
+| **Outputs**    | `models.rds`, `unadjusted_data.rds`, `unadjusted_fit_{0..11}.rds`, `unadjusted_fits.rds` |
+| **Method**     | MM-estimation robust regression (bisquare ψ); bootstrapping disabled |
+| **Requires**   | [Step 6 (Post-Imputation Finalization)](/analysis/data/post-imputation/index.qmd) |
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+::: {.callout-note icon=false}
+## Rationale
+
+- Energy adjustment: `dhd_kcal` enters as a covariate so that parental and partner SEP coefficients reflect dietary composition rather than caloric volume, consistent with the DHD15 scoring framework [@looman2017dutch]
+- Lifestyle covariate: `smoking` is adjusted for as a co-occurring health behaviour; this follows standard practice in SES–diet research and is not attributed to a single source
+- Own SES at baseline: entering `education_self` and `isei08_self` in Model 1 yields parental and partner SEP coefficients interpreted net of own attainment, matching the wording of H1 and H2
+- Parallel composite and disaggregated families: Models 2–6 test mean-of-parents effects; Models 7–11 reproduce the same nesting with separate mother and father terms to expose parent-specific contributions
+:::
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+```{r}
+#| label: load-project-resources
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# clear global environment, garbage collect, and detach packages
+rm(list = ls(envir = .GlobalEnv), envir = .GlobalEnv)
+invisible(gc(full = TRUE))
+invisible(lapply(grep(":|autoloads|globalenv", search(),
+  invert = TRUE, value = TRUE, ignore.case = TRUE
+), detach, character.only = TRUE, unload = TRUE, force = TRUE))
+
+# source custom functions
+purrr::walk(file.path(here::here("assets", "functions"), paste0(c(
+  "robust_analysis", "standardize", "create_lmrob_control", "save_function",
+  "named_list", "numeric_df", "set_globals", "import_pipes", "process_model",
+  "fit_robust_model", "sci_to_tex", "prepare_model_matrices", "fit_models"
+), ".R")), source)
+
+# set global options and import pipe operators
+set_globals()
+import_pipes()
+
+# global recompute switch
+# TRUE re-runs the heavy steps; FALSE loads cached assets when they exist
+recompute_heavy <- FALSE
+
+# define analysis type
+type <- "unadjusted"
+options(width = 250)
+
+# load analysis-ready dataset from step 6
+analysis_data <- haven::read_sav(
+  here::here("assets", "data", "saved", "analysis_ready.sav")
+)
+
+models_dir <- here::here("assets", "models")
+if (!dir.exists(models_dir)) dir.create(models_dir, recursive = TRUE)
+
+# consolidated output path; cached fits are reused when this file exists
+consolidated_path <- file.path(models_dir, paste0(type, "_fits.rds"))
+
+# refit when forced or when no cached consolidated fits exist
+refit_models <- recompute_heavy || !file.exists(consolidated_path)
+
+# when refitting, purge only this step's outputs (stale fits and specs);
+# step 9 fits and step 10 caches stay intact
+if (refit_models) {
+  unlink(Sys.glob(file.path(models_dir, "unadjusted_*")))
+  unlink(file.path(models_dir, "models.rds"))
+}
+```
+
+## Verify Dataset from Step 6
+
+Confirm expected variables are present before model fitting.
+
+```{r}
+#| label: verify-step6-data
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+# define expected variables from step 6
+ses_composites <- c("education_parental", "isei08_parental")
+
+# partner SES (structural NA for non-partnered)
+partner_ses <- c("education_partner", "isei08_partner")
+
+# individual parent variables for disaggregated models
+parental_disagg <- c(
+  "education_father", "education_mother",
+  "isei08_father", "isei08_mother"
+)
+
+# core regression variables
+core_vars <- c(
+  "dhd_index", "woman", "age", "partner",
+  "education_self", "isei08_self"
+)
+
+# optional variables (may or may not be present)
+optional_vars <- c("dhd_kcal", "smoking", "income_hh")
+
+# check presence
+ses_present <- ses_composites[ses_composites %in% names(analysis_data)]
+ses_missing <- setdiff(ses_composites, ses_present)
+partner_present <- partner_ses[partner_ses %in% names(analysis_data)]
+partner_missing <- setdiff(partner_ses, partner_present)
+parental_present <- parental_disagg[parental_disagg %in% names(analysis_data)]
+parental_missing <- setdiff(parental_disagg, parental_present)
+core_present <- core_vars[core_vars %in% names(analysis_data)]
+core_missing <- setdiff(core_vars, core_present)
+optional_present <- optional_vars[optional_vars %in% names(analysis_data)]
+
+# sample sizes
+n_total <- nrow(analysis_data)
+n_partnered <- sum(analysis_data$partner == 1, na.rm = TRUE)
+n_non_partnered <- sum(analysis_data$partner == 0, na.rm = TRUE)
+
+# display verification results
+verify_msg <- glue(
+  "<div class='callout-note'>
+<strong>Dataset Verification (Step 6)</strong><br><br>
+<strong>Input:</strong> {n_total} observations<br>
+<strong>Partnered:</strong> {n_partnered} ({round(100 * n_partnered / n_total, 1)}%)<br>
+<strong>Non-partnered:</strong> {n_non_partnered} ({round(100 * n_non_partnered / n_total, 1)}%)<br><br>
+<strong>Core variables:</strong> {if (length(core_missing) == 0) 'All present &#10003;' else paste('Missing:', paste(core_missing, collapse = ', '))}<br>
+<strong>Parental composites:</strong> {if (length(ses_missing) == 0) 'All present &#10003;' else paste('Missing:', paste(ses_missing, collapse = ', '))}<br>
+<strong>Parental disaggregated:</strong> {if (length(parental_missing) == 0) 'All present &#10003;' else paste('Missing:', paste(parental_missing, collapse = ', '))}<br>
+<strong>Partner SES:</strong> {if (length(partner_missing) == 0) 'All present &#10003;' else paste('Missing:', paste(partner_missing, collapse = ', '))}<br>
+<strong>Optional variables:</strong> {if (length(optional_present) > 0) paste(optional_present, collapse = ', ') else 'None'}
+</div>"
+)
+cat(verify_msg)
+
+# stop if critical variables are missing
+if (length(core_missing) > 0) {
+  stop("Missing core variables: ", paste(core_missing, collapse = ", "))
+}
+if (length(ses_missing) > 0) {
+  warning("Missing parental composites: ", paste(ses_missing, collapse = ", "))
+}
+```
+
+## Model Specifications
+
+### Model 0: Null Model
+
+```{r}
+#| label: specify-model-0
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+model_0 <- dhd_index ~ 1
+```
+
+### Model 1: Adult Covariates and Own SES (Adjustment Set)
+
+```{r}
+#| label: specify-model-1
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# base model: demographics + lifestyle + own SES
+base_formula <- dhd_index ~ woman + age + partner +
+  education_self + isei08_self
+
+# nutritional-epidemiology covariate: total energy intake
+if ("dhd_kcal" %in% names(analysis_data)) {
+  base_formula <- update(base_formula, . ~ . + dhd_kcal)
+}
+# lifestyle covariate: smoking status
+if ("smoking" %in% names(analysis_data)) {
+  base_formula <- update(base_formula, . ~ . + smoking)
+}
+# household economics (optional, conditional on availability)
+if ("income_hh" %in% names(analysis_data)) {
+  base_formula <- update(base_formula, . ~ . + income_hh)
+}
+
+model_1 <- base_formula
+```
+
+## Composite SES Models (Models 2–6)
+
+These models use parental composites that average mother and father within education and occupation domains.
+
+### Model 2: Add Parental SES Main Effects (H1, RQ1)
+
+```{r}
+#| label: specify-model-2
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+model_2 <- update(model_1, . ~ . +
+  education_parental +
+  isei08_parental)
+```
+
+### Model 3: Add Partner SES Main Effects (H2, RQ2)
+
+```{r}
+#| label: specify-model-3
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+model_3 <- update(model_2, . ~ . +
+  education_partner:partner +
+  isei08_partner:partner)
+```
+
+### Model 4: Gender Moderation of Parental and Partner SES (H3, H4, RQ3)
+
+```{r}
+#| label: specify-model-4
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+model_4 <- update(model_3, . ~ . +
+  woman:education_parental +
+  woman:isei08_parental +
+  woman:education_partner:partner +
+  woman:isei08_partner:partner)
+```
+
+### Model 5: Parental × Partner SES Synergy (H5, RQ4)
+
+```{r}
+#| label: specify-model-5
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+model_5 <- update(model_4, . ~ . +
+  education_parental:education_partner:partner +
+  isei08_parental:isei08_partner:partner)
+```
+
+### Model 6: Gender Moderation of Synergy (H6, RQ4)
+
+```{r}
+#| label: specify-model-6
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+model_6 <- update(model_5, . ~ . +
+  woman:education_parental:education_partner:partner +
+  woman:isei08_parental:isei08_partner:partner)
+```
+
+## Disaggregated SES Models (Models 7–11)
+
+These models use separate variables for mother, father, and partner education and occupation.
+
+### Model 7: Mother and Father SES Main Effects (H1, RQ1)
+
+```{r}
+#| label: specify-model-7
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+model_7 <- update(model_1, . ~ . +
+  education_mother +
+  education_father +
+  isei08_mother +
+  isei08_father)
+```
+
+### Model 8: Add Partner SES Main Effects (H2, RQ2)
+
+```{r}
+#| label: specify-model-8
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+model_8 <- update(model_7, . ~ . +
+  education_partner:partner +
+  isei08_partner:partner)
+```
+
+### Model 9: Gender × Mother/Father/Partner SES Interactions (H3, H4, RQ3)
+
+```{r}
+#| label: specify-model-9
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+model_9 <- update(model_8, . ~ . +
+  woman:education_mother +
+  woman:education_father +
+  woman:isei08_mother +
+  woman:isei08_father +
+  woman:education_partner:partner +
+  woman:isei08_partner:partner)
+```
+
+### Model 10: Mother × Partner and Father × Partner Synergy (H5, RQ4)
+
+```{r}
+#| label: specify-model-10
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+model_10 <- update(model_9, . ~ . +
+  education_mother:education_partner:partner +
+  education_father:education_partner:partner +
+  isei08_mother:isei08_partner:partner +
+  isei08_father:isei08_partner:partner)
+```
+
+### Model 11: Gender × Parent-Specific Synergy (H6, RQ4)
+
+```{r}
+#| label: specify-model-11
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+model_11 <- update(model_10, . ~ . +
+  woman:education_mother:education_partner:partner +
+  woman:education_father:education_partner:partner +
+  woman:isei08_mother:isei08_partner:partner +
+  woman:isei08_father:isei08_partner:partner)
+```
+
+## Prepare Data for Model Fitting
+
+```{r}
+#| label: prepare-data
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# collect model objects in numeric order
+model_names <- ls(pattern = "^model_[0-9]+$")
+model_names <- model_names[order(as.integer(sub("model_", "", model_names)))]
+models <- lapply(model_names, function(nm) get(nm, envir = .GlobalEnv))
+names(models) <- model_names
+
+# save model specifications
+saveRDS(models, file = file.path(models_dir, "models.rds"))
+
+# prepare analysis data
+unadjusted_data <- numeric_df(analysis_data) %>%
+  dplyr::mutate(
+    # ensure partner is numeric binary
+    partner = as.numeric(partner == 1),
+
+    # condition partner SES on having a partner (set to 0 for non-partnered)
+    education_partner = dplyr::if_else(partner == 0, 0, education_partner),
+    isei08_partner = dplyr::if_else(partner == 0, 0, isei08_partner)
+  )
+
+# identify variables used in models
+vars_in_models <- unique(unlist(lapply(models, function(m) {
+  as.character(attr(stats::terms(m), "variables"))[-1]
+})))
+
+# define analysis variable set
+analysis_vars <- c(
+  "dhd_index",
+  # parental composites
+  "education_parental", "isei08_parental",
+  # disaggregated parental
+  "education_father", "education_mother",
+  "isei08_father", "isei08_mother",
+  # partner
+  "education_partner", "isei08_partner",
+  # own SES
+  "education_self", "isei08_self",
+  # demographics
+  "partner", "woman", "age"
+)
+
+# add optional covariates if present
+if ("dhd_kcal" %in% names(unadjusted_data)) {
+  analysis_vars <- c(analysis_vars, "dhd_kcal")
+}
+if ("smoking" %in% names(unadjusted_data)) {
+  analysis_vars <- c(analysis_vars, "smoking")
+}
+if ("income_hh" %in% names(unadjusted_data)) {
+  analysis_vars <- c(analysis_vars, "income_hh")
+}
+
+vars_keep <- unique(c(vars_in_models, analysis_vars))
+vars_keep <- intersect(vars_keep, names(unadjusted_data))
+
+unadjusted_data <- unadjusted_data[vars_keep]
+
+# save preprocessed dataset
+saveRDS(unadjusted_data, file = here::here("assets", "data", "saved", "unadjusted_data.rds"))
+
+# disable bootstrapping for baseline fits
+n_bootstraps <- 0
+```
+
+```{r}
+#| label: data-summary
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+data_msg <- glue(
+  "<div class='callout-note'>
+<strong>Analysis Dataset Prepared</strong><br><br>
+<strong>Observations:</strong> {nrow(unadjusted_data)}<br>
+<strong>Variables retained:</strong> {ncol(unadjusted_data)}<br>
+<strong>Models specified:</strong> {length(models)} (Models 0-{length(models) - 1})<br>
+<strong>Bootstrap iterations:</strong> {n_bootstraps} (disabled for baseline)<br><br>
+<strong>Parental composites:</strong> <code>education_parental</code>, <code>isei08_parental</code><br>
+<strong>Disaggregated parental:</strong> <code>education_mother</code>, <code>education_father</code>, <code>isei08_mother</code>, <code>isei08_father</code><br>
+<strong>Partner SES:</strong> <code>education_partner</code>, <code>isei08_partner</code>
+</div>"
+)
+cat(data_msg)
+```
+
+## Fit Regression Models
+
+### Fit Model 0: Null Model (Baseline)
+
+```{r}
+#| label: fit-model-0
+#| eval: !expr refit_models
+#| code-fold: show
+#| column: body-outset-right
+
+fit_0 <- robust_analysis(
+  data = get(glue("{type}_data")),
+  form = model_0,
+  n_boots = n_bootstraps,
+  pct = 0.95,
+  alpha = 0.05,
+  delta = 0.01,
+  ctrl = NULL,
+  seed = 625,
+  psi = "bisquare",
+  std_data = TRUE
+)
+
+saveRDS(fit_0, file = file.path(models_dir, glue("{type}_fit_0.rds")))
+```
+
+### Fit Model 1: Adult Covariates and Own SES (Baseline)
+
+```{r}
+#| label: fit-model-1-hidden
+#| eval: !expr refit_models
+#| message: false
+#| code-fold: show
+#| column: page-right
+
+fit_1 <- robust_analysis(
+  data = get(glue("{type}_data")),
+  form = model_1,
+  n_boots = n_bootstraps,
+  pct = 0.95,
+  alpha = 0.05,
+  delta = 0.01,
+  ctrl = NULL,
+  seed = 625,
+  psi = "bisquare",
+  std_data = TRUE
+)
+
+saveRDS(fit_1, file = file.path(models_dir, glue("{type}_fit_1.rds")))
+```
+
+### Fit Model 2: Parental SES Main Effects, Composite (H1, RQ1)
+
+```{r}
+#| label: fit-model-2-hidden
+#| eval: !expr refit_models
+#| message: false
+#| code-fold: show
+#| column: page-right
+
+fit_2 <- robust_analysis(
+  data = get(glue("{type}_data")),
+  form = model_2,
+  n_boots = n_bootstraps,
+  pct = 0.95,
+  alpha = 0.05,
+  delta = 0.01,
+  ctrl = NULL,
+  seed = 625,
+  psi = "bisquare",
+  std_data = TRUE
+)
+
+saveRDS(fit_2, file = file.path(models_dir, glue("{type}_fit_2.rds")))
+```
+
+### Fit Model 3: Partner SES Main Effects, Composite (H2, RQ2)
+
+```{r}
+#| label: fit-model-3-hidden
+#| eval: !expr refit_models
+#| message: false
+#| code-fold: show
+#| column: page-right
+
+fit_3 <- robust_analysis(
+  data = get(glue("{type}_data")),
+  form = model_3,
+  n_boots = n_bootstraps,
+  pct = 0.95,
+  alpha = 0.05,
+  delta = 0.01,
+  ctrl = NULL,
+  seed = 625,
+  psi = "bisquare",
+  std_data = TRUE
+)
+
+saveRDS(fit_3, file = file.path(models_dir, glue("{type}_fit_3.rds")))
+```
+
+### Fit Model 4: Gender Moderation of SES, Composite (H3, H4, RQ3)
+
+```{r}
+#| label: fit-model-4-hidden
+#| eval: !expr refit_models
+#| message: false
+#| code-fold: show
+#| column: page-right
+
+fit_4 <- robust_analysis(
+  data = get(glue("{type}_data")),
+  form = model_4,
+  n_boots = n_bootstraps,
+  pct = 0.95,
+  alpha = 0.05,
+  delta = 0.01,
+  ctrl = NULL,
+  seed = 625,
+  psi = "bisquare",
+  std_data = TRUE
+)
+
+saveRDS(fit_4, file = file.path(models_dir, glue("{type}_fit_4.rds")))
+```
+
+### Fit Model 5: Parental × Partner Synergy, Composite (H5, RQ4)
+
+```{r}
+#| label: fit-model-5-hidden
+#| eval: !expr refit_models
+#| message: false
+#| code-fold: show
+#| column: page-right
+
+fit_5 <- robust_analysis(
+  data = get(glue("{type}_data")),
+  form = model_5,
+  n_boots = n_bootstraps,
+  pct = 0.95,
+  alpha = 0.05,
+  delta = 0.01,
+  ctrl = NULL,
+  seed = 625,
+  psi = "bisquare",
+  std_data = TRUE
+)
+
+saveRDS(fit_5, file = file.path(models_dir, glue("{type}_fit_5.rds")))
+```
+
+### Fit Model 6: Gender-Moderated Synergy, Composite (H6, RQ4)
+
+```{r}
+#| label: fit-model-6-hidden
+#| eval: !expr refit_models
+#| message: false
+#| code-fold: show
+#| column: page-right
+
+fit_6 <- robust_analysis(
+  data = get(glue("{type}_data")),
+  form = model_6,
+  n_boots = n_bootstraps,
+  pct = 0.95,
+  alpha = 0.05,
+  delta = 0.01,
+  ctrl = NULL,
+  seed = 625,
+  psi = "bisquare",
+  std_data = TRUE
+)
+
+saveRDS(fit_6, file = file.path(models_dir, glue("{type}_fit_6.rds")))
+```
+
+### Fit Model 7: Mother/Father SES Main Effects, Disaggregated (H1, RQ1)
+
+```{r}
+#| label: fit-model-7-hidden
+#| eval: !expr refit_models
+#| message: false
+#| code-fold: show
+#| column: page-right
+
+fit_7 <- robust_analysis(
+  data = get(glue("{type}_data")),
+  form = model_7,
+  n_boots = n_bootstraps,
+  pct = 0.95,
+  alpha = 0.05,
+  delta = 0.01,
+  ctrl = NULL,
+  seed = 625,
+  psi = "bisquare",
+  std_data = TRUE
+)
+
+saveRDS(fit_7, file = file.path(models_dir, glue("{type}_fit_7.rds")))
+```
+
+### Fit Model 8: Partner SES Main Effects, Disaggregated (H2, RQ2)
+
+```{r}
+#| label: fit-model-8-hidden
+#| eval: !expr refit_models
+#| message: false
+#| code-fold: show
+#| column: page-right
+
+fit_8 <- robust_analysis(
+  data = get(glue("{type}_data")),
+  form = model_8,
+  n_boots = n_bootstraps,
+  pct = 0.95,
+  alpha = 0.05,
+  delta = 0.01,
+  ctrl = NULL,
+  seed = 625,
+  psi = "bisquare",
+  std_data = TRUE
+)
+
+saveRDS(fit_8, file = file.path(models_dir, glue("{type}_fit_8.rds")))
+```
+
+### Fit Model 9: Gender × Mother/Father/Partner SES, Disaggregated (H3, H4, RQ3)
+
+```{r}
+#| label: fit-model-9-hidden
+#| eval: !expr refit_models
+#| message: false
+#| code-fold: show
+#| column: page-right
+
+fit_9 <- robust_analysis(
+  data = get(glue("{type}_data")),
+  form = model_9,
+  n_boots = n_bootstraps,
+  pct = 0.95,
+  alpha = 0.05,
+  delta = 0.01,
+  ctrl = NULL,
+  seed = 625,
+  psi = "bisquare",
+  std_data = TRUE
+)
+
+saveRDS(fit_9, file = file.path(models_dir, glue("{type}_fit_9.rds")))
+```
+
+### Fit Model 10: Parent × Partner Synergy, Disaggregated (H5, RQ4)
+
+```{r}
+#| label: fit-model-10-hidden
+#| eval: !expr refit_models
+#| message: false
+#| code-fold: show
+#| column: page-right
+
+fit_10 <- robust_analysis(
+  data = get(glue("{type}_data")),
+  form = model_10,
+  n_boots = n_bootstraps,
+  pct = 0.95,
+  alpha = 0.05,
+  delta = 0.01,
+  ctrl = NULL,
+  seed = 625,
+  psi = "bisquare",
+  std_data = TRUE
+)
+
+saveRDS(fit_10, file = file.path(models_dir, glue("{type}_fit_10.rds")))
+```
+
+### Fit Model 11: Gender × Parent-Specific Synergy, Disaggregated (H6, RQ4)
+
+```{r}
+#| label: fit-model-11-hidden
+#| eval: !expr refit_models
+#| message: false
+#| code-fold: show
+#| column: page-right
+
+fit_11 <- robust_analysis(
+  data = get(glue("{type}_data")),
+  form = model_11,
+  n_boots = n_bootstraps,
+  pct = 0.95,
+  alpha = 0.05,
+  delta = 0.01,
+  ctrl = NULL,
+  seed = 625,
+  psi = "bisquare",
+  std_data = TRUE
+)
+
+saveRDS(fit_11, file = file.path(models_dir, glue("{type}_fit_11.rds")))
+```
+
+## Save All Model Fits
+
+```{r}
+#| label: save-all-fits
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# rebuild and persist the consolidated list only when (re)fitting
+if (refit_models) {
+  all_fits <- named_list(
+    fit_0, fit_1, fit_2, fit_3, fit_4, fit_5, fit_6,
+    fit_7, fit_8, fit_9, fit_10, fit_11
+  )
+
+  saveRDS(all_fits, consolidated_path)
+} else {
+  message("cached fits found; skipping model fitting (set recompute_heavy <- TRUE to refit)")
+}
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+## Output
+
+| File                                       | Content                                               |
+| ------------------------------------------ | ----------------------------------------------------- |
+| `assets/models/models.rds`                 | Formula specifications for Models 0–11                |
+| `assets/data/saved/unadjusted_data.rds`    | Preprocessed analysis dataset for the unadjusted fits |
+| `assets/models/unadjusted_fit_{0..11}.rds` | One MM-estimation fit object per model specification  |
+| `assets/models/unadjusted_fits.rds`        | Consolidated named list of all 12 fitted models       |
+
+**Next:** [Step 8 (Influence Diagnostics)](/analysis/models/assumptions/index.qmd)
