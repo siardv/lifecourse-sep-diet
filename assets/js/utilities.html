@@ -151,8 +151,46 @@
       ) {
         return;
       }
+
+      // non-navigational schemes never need a new browsing context
+      if (/^(mailto:|tel:|sms:|data:|blob:)/i.test(href)) {
+        return;
+      }
+
+      // resolve the href against the current page url; anything
+      // unparsable is left untouched
+      let url;
+      try {
+        url = new URL(href, window.location.href);
+      } catch (e) {
+        return;
+      }
+
+      // origin-based check, independent of css classes or markup:
+      // sidebar, navbar, breadcrumb, pagination, and any relative or
+      // same-origin link resolves to the page origin and stays in the
+      // current tab. window.location.origin is the literal string
+      // "null" under file:// (local preview), so fall back to
+      // comparing protocol and host in that case.
+      const sameSite =
+        window.location.origin !== "null"
+          ? url.origin === window.location.origin
+          : url.protocol === window.location.protocol &&
+            url.host === window.location.host;
+      if (sameSite) {
+        return;
+      }
+
+      // genuinely external destination: open in a new tab without
+      // handing window.opener to the target page; merge rel tokens
+      // instead of overwriting any the author already set
       link.setAttribute("target", "_blank");
-      link.setAttribute("rel", "noopener noreferrer");
+      const relTokens = new Set(
+        (link.getAttribute("rel") || "").split(/\s+/).filter(Boolean)
+      );
+      relTokens.add("noopener");
+      relTokens.add("noreferrer");
+      link.setAttribute("rel", Array.from(relTokens).join(" "));
     });
   }
 

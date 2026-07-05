@@ -614,6 +614,10 @@ if (recompute_heavy || !file.exists(consolidated_path)) {
 #| results: asis
 #| code-fold: true
 
+# display a project-relative path so rendered pages never expose the
+# local filesystem layout and stay portable across machines
+models_dir_rel <- sub(paste0(here::here(), "/"), "", models_dir, fixed = TRUE)
+
 export_msg <- glue::glue(
   "<div class='callout-note'>
 <strong>Exported Files</strong><br><br>
@@ -623,7 +627,7 @@ export_msg <- glue::glue(
 <strong>Consolidated fits:</strong> <code>adjusted_fits.rds</code><br><br>
 <strong>Composite models (2–6):</strong> Use education_parental, isei08_parental, education_partner, isei08_partner<br>
 <strong>Disaggregated models (7–11):</strong> Use education/isei08 × mother/father/partner<br><br>
-All files saved to: <code>{models_dir}</code>
+All files saved to: <code>{models_dir_rel}</code>
 </div>"
 )
 cat(export_msg)
