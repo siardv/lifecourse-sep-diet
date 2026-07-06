@@ -1,0 +1,343 @@
+isco08,isco88,label_nl,egp11,egp_label,egp11_farm_selfempl,egp_note
+0000,0110,Militaire beroepen z.n.d.,NA,NA,NA,armed forces: no egp class in iskoroot
+0110,0110,Officieren,NA,NA,NA,armed forces: no egp class in iskoroot
+0310,0110,Andere militaire rangen,NA,NA,NA,armed forces: no egp class in iskoroot
+1000,1000,Managers z.n.d.,1,I :Higher Controllers,1,NA
+1111,1110,Leden wetgevende instanties,1,I :Higher Controllers,1,NA
+1112,1120,Ambtenaren in beleidvoerende functies,1,I :Higher Controllers,1,NA
+1114,1140,Bestuurders van belangenorganisaties,2,II :Lower Controllers,2,NA
+1120,1210,Topbestuurders en algemeen directeuren van grote ondernemingen,1,I :Higher Controllers,1,NA
+1211,1231,Financieel managers,1,I :Higher Controllers,1,NA
+1212,1232,Managers personeel en organisatie,1,I :Higher Controllers,1,NA
+1213,1239,Managers beleid en planning,1,I :Higher Controllers,1,NA
+1219,1229,Managers zakelijke en administratieve dienstverlening n.e.g.,1,I :Higher Controllers,1,NA
+1221,1233,Managers verkoop en marketing,1,I :Higher Controllers,1,NA
+1222,1234,Managers reclame en public relations,1,I :Higher Controllers,1,NA
+1223,1237,Managers onderzoek en ontwikkeling (R&D),1,I :Higher Controllers,1,NA
+1311,1221,Managers landbouw en bosbouw,11,IVc:Selfempl Farmer,11,NA
+1312,1221,Managers aquacultuur en visserij,11,IVc:Selfempl Farmer,11,NA
+1321,1222,Managers industrie,1,I :Higher Controllers,1,NA
+1323,1223,Managers bouwnijverheid,1,I :Higher Controllers,1,NA
+1324,1235,"Managers logistiek, distributie en aanverwante gebieden",1,I :Higher Controllers,1,NA
+1330,1236,Managers informatie- en communicatietechnologie,1,I :Higher Controllers,1,NA
+1341,1229,Managers kinderopvang,1,I :Higher Controllers,1,NA
+1342,1229,Managers gezondheidszorg,1,I :Higher Controllers,1,NA
+1344,1229,Managers sociale dienstverlening,1,I :Higher Controllers,1,NA
+1345,1229,Managers onderwijs,1,I :Higher Controllers,1,NA
+1346,1227,Managers financiële dienstverlening en verzekeringen,1,I :Higher Controllers,1,NA
+1349,1229,Managers gespecialiseerde dienstverlening n.e.g.,1,I :Higher Controllers,1,NA
+1411,1315,Hotelmanagers,2,II :Lower Controllers,2,NA
+1412,1315,Restaurantmanagers,2,II :Lower Controllers,2,NA
+1420,1314,Managers detail- en groothandel,2,II :Lower Controllers,2,NA
+1431,1319,Managers recreatie en amusement,2,II :Lower Controllers,2,NA
+1439,1319,Managers commerciële en persoonlijke dienstverlening n.e.g.,2,II :Lower Controllers,2,NA
+2111,2111,Natuurkundigen en sterrenkundigen,1,I :Higher Controllers,1,NA
+2113,2113,Chemici,1,I :Higher Controllers,1,NA
+2114,2114,Geologen en geofysici,1,I :Higher Controllers,1,NA
+2120,2120,"Wiskundigen, actuarissen en statistici",1,I :Higher Controllers,1,NA
+2131,2211,"Biologen, botanici, zoölogen",1,I :Higher Controllers,1,NA
+2132,2213,"Adviseurs op het gebied van landbouw, bosbouw en visserij",1,I :Higher Controllers,1,NA
+2133,2200,Milieudeskundigen,1,I :Higher Controllers,1,NA
+2140,2140,Ingenieurs (m.u.v. elektrotechnisch ingenieurs) z.n.d.,1,I :Higher Controllers,1,NA
+2141,2149,Industrieel ingenieurs en productie-ingenieurs,1,I :Higher Controllers,1,NA
+2142,2142,Weg- en waterbouwkundigen,1,I :Higher Controllers,1,NA
+2144,2145,Werktuigbouwkundigen,1,I :Higher Controllers,1,NA
+2145,2146,Chemisch ingenieurs,1,I :Higher Controllers,1,NA
+2146,2147,Mijnbouwkundigen en metaalkundigen,1,I :Higher Controllers,1,NA
+2149,2149,Ingenieurs n.e.g.,1,I :Higher Controllers,1,NA
+2151,2143,Elektrotechnisch ingenieurs,1,I :Higher Controllers,1,NA
+2152,2144,Elektronica- en hardware ingenieurs,1,I :Higher Controllers,1,NA
+2153,2144,Telecommunicatie-ingenieurs,1,I :Higher Controllers,1,NA
+2160,2140,"Architecten, planologen, landmeetkundigen en vormgevers z.n.d.",1,I :Higher Controllers,1,NA
+2161,2141,Bouwkundig- en interieurarchitecten,1,I :Higher Controllers,1,NA
+2163,3471,Product- en kledingontwerpers,2,II :Lower Controllers,2,NA
+2164,2141,Stedenbouwkundigen en verkeersplanologen,1,I :Higher Controllers,1,NA
+2165,2148,Cartografen en landmeetkundigen,2,II :Lower Controllers,2,NA
+2166,3471,Grafisch vormgevers en multimedia vormgevers,2,II :Lower Controllers,2,NA
+2210,2220,Artsen z.n.d.,1,I :Higher Controllers,1,NA
+2211,2221,Huisartsen en basisartsen (niet in opleiding tot specialist),1,I :Higher Controllers,1,NA
+2212,2221,Medisch specialisten,1,I :Higher Controllers,1,NA
+2221,2230,Gespecialiseerd verpleegkundigen en verpleegkundig coördinatoren,2,II :Lower Controllers,2,NA
+2222,2230,Verloskundigen,2,II :Lower Controllers,2,NA
+2230,3229,Alternatief genezers,2,II :Lower Controllers,2,NA
+2240,3221,Physician assistents,2,II :Lower Controllers,2,NA
+2250,2223,Dierenartsen,1,I :Higher Controllers,1,NA
+2261,2222,Tandartsen,1,I :Higher Controllers,1,NA
+2262,2224,Apothekers,1,I :Higher Controllers,1,NA
+2263,2229,Specialisten op het gebied van de milieu- en arbeidshygiëne,1,I :Higher Controllers,1,NA
+2264,3226,Fysiotherapeuten,2,II :Lower Controllers,2,NA
+2265,3223,Diëtisten en voedingsdeskundigen,2,II :Lower Controllers,2,NA
+2266,3229,Audiologen en logopedisten,2,II :Lower Controllers,2,NA
+2267,3224,Optometristen en orthoptisten,2,II :Lower Controllers,2,NA
+2269,2229,Specialisten op het gebied van de gezondheidszorg n.e.g.,1,I :Higher Controllers,1,NA
+2300,2300,Docenten z.n.d.,2,II :Lower Controllers,2,NA
+2310,2310,Hoogleraren en andere docenten hoger onderwijs,1,I :Higher Controllers,1,NA
+2320,2320,Docenten beroepsgerichte vakken secundair onderwijs,2,II :Lower Controllers,2,NA
+2330,2320,Docenten algemene vakken secundair onderwijs,2,II :Lower Controllers,2,NA
+2341,2331,Docenten basisonderwijs,2,II :Lower Controllers,2,NA
+2342,2332,Docenten voorschools onderwijs,2,II :Lower Controllers,2,NA
+2351,2351,Specialisten op het gebied van onderwijsmethoden,1,I :Higher Controllers,1,NA
+2352,2340,Docenten speciaal onderwijs,2,II :Lower Controllers,2,NA
+2354,2359,Muziekleraren (particulier),2,II :Lower Controllers,2,NA
+2355,2359,Kunstleraren (particulier),2,II :Lower Controllers,2,NA
+2359,2359,Onderwijsbegeleiders en -adviseurs n.e.g.,2,II :Lower Controllers,2,NA
+2411,2411,Accountants,1,I :Higher Controllers,1,NA
+2412,2419,Financieel en beleggingsadviseurs,2,II :Lower Controllers,2,NA
+2421,2419,Bedrijfskundigen en organisatieadviseurs,2,II :Lower Controllers,2,NA
+2422,2419,Beleidsadviseurs,2,II :Lower Controllers,2,NA
+2423,2412,Specialisten personeels- en loopbaanontwikkeling,2,II :Lower Controllers,2,NA
+2424,2412,Specialisten bedrijfsopleidingen,2,II :Lower Controllers,2,NA
+2431,2419,Specialisten reclame en marketing,2,II :Lower Controllers,2,NA
+2432,2419,Specialisten public relations,2,II :Lower Controllers,2,NA
+2433,3415,Vertegenwoordigers en accountmanagers industrie,2,II :Lower Controllers,2,NA
+2511,2131,Systeemanalisten en ICT-adviseurs,1,I :Higher Controllers,1,NA
+2512,2131,Softwareontwikkelaars,1,I :Higher Controllers,1,NA
+2513,2131,Web- en multimediaontwikkelaars,1,I :Higher Controllers,1,NA
+2514,2132,Applicatieprogrammeurs,2,II :Lower Controllers,2,NA
+2519,2131,Software- en applicatieontwikkelaars en -analisten n.e.g.,1,I :Higher Controllers,1,NA
+2521,2131,Ontwerpers en beheerders van databases,1,I :Higher Controllers,1,NA
+2522,2131,Systeembeheerders,1,I :Higher Controllers,1,NA
+2523,2131,Netwerkspecialisten,1,I :Higher Controllers,1,NA
+2529,2139,Databank- en netwerkspecialisten n.e.g.,2,II :Lower Controllers,2,NA
+2611,2421,Advocaten,1,I :Higher Controllers,1,NA
+2612,2422,Rechters,1,I :Higher Controllers,1,NA
+2619,2429,Juristen n.e.g.,1,I :Higher Controllers,1,NA
+2621,2431,Archivarissen en conservators,2,II :Lower Controllers,2,NA
+2622,2432,Bibliothecarissen,2,II :Lower Controllers,2,NA
+2631,2441,Economen,1,I :Higher Controllers,1,NA
+2632,2442,"Sociologen, antropologen",1,I :Higher Controllers,1,NA
+2633,2443,"Filosofen, historici en politicologen",1,I :Higher Controllers,1,NA
+2634,2445,Psychologen,1,I :Higher Controllers,1,NA
+2635,2446,Maatschappelijk werkers en specialistische sociale hulpverleners,2,II :Lower Controllers,2,NA
+2636,2460,Theologen en voorgangers van de eredienst,2,II :Lower Controllers,2,NA
+2641,2451,"Auteurs, technisch schrijvers",2,II :Lower Controllers,2,NA
+2642,2451,Journalisten,2,II :Lower Controllers,2,NA
+2643,2444,"Vertalers, tolken en andere taalkundigen",2,II :Lower Controllers,2,NA
+2651,2452,Beeldend kunstenaars,2,II :Lower Controllers,2,NA
+2652,2453,"Musici, zangers en componisten",2,II :Lower Controllers,2,NA
+2653,2454,Dansers en choreografen,2,II :Lower Controllers,2,NA
+2654,2455,"Regisseurs en producenten televisie, film en theater",2,II :Lower Controllers,2,NA
+2655,2455,Acteurs,2,II :Lower Controllers,2,NA
+2656,3472,"Omroepers voor radio, televisie en andere media",2,II :Lower Controllers,2,NA
+2659,3474,Entertainment artiesten,2,II :Lower Controllers,2,NA
+3111,3111,Scheikundige en natuurkundige onderzoekstechnici,2,II :Lower Controllers,2,NA
+3112,3112,"Technici weg- en waterbouw, bouwinspecteurs en landmeters",2,II :Lower Controllers,2,NA
+3113,3113,Elektrotechnici,2,II :Lower Controllers,2,NA
+3114,3114,Technici elektronica,2,II :Lower Controllers,2,NA
+3115,3115,Technici werktuigbouwkunde,2,II :Lower Controllers,2,NA
+3117,3117,Technici delfstofwinning en metallurgie,2,II :Lower Controllers,2,NA
+3118,3118,Technisch tekenaars,2,II :Lower Controllers,2,NA
+3119,3119,Vakspecialisten op het gebied van natuur- en technische wetenschappen n.e.g.,2,II :Lower Controllers,2,NA
+3122,1222,Toezichthoudend personeel in de industrie,1,I :Higher Controllers,1,NA
+3123,1223,Toezichthoudend personeel in de bouwnijverheid,1,I :Higher Controllers,1,NA
+3139,8290,Procesoperators n.e.g.,9,VIIa:Unskilled Worker,9,NA
+3141,3211,Analisten en laboranten levenswetenschappen (m.u.v. medisch),2,II :Lower Controllers,2,NA
+3142,3212,Vakspecialisten landbouw,2,II :Lower Controllers,2,NA
+3143,3212,"Boswachters, bos- en natuurbeheerders",2,II :Lower Controllers,2,NA
+3152,3142,Dekofficieren en loodsen,2,II :Lower Controllers,2,NA
+3153,3143,"Piloten, vlieginstructeurs",1,I :Higher Controllers,1,NA
+3154,3144,Luchtverkeersleiders,1,I :Higher Controllers,1,NA
+3211,3133,Laboranten medische diagnostiek en therapie,2,II :Lower Controllers,2,NA
+3212,3211,Medisch en pathologisch laboranten,2,II :Lower Controllers,2,NA
+3213,3228,Farmaceutisch medewerkers en apothekersassistenten,2,II :Lower Controllers,2,NA
+3214,7311,Prothese- en tandtechnici,8,VI :Skilled Worker,8,NA
+3221,3231,Verpleegkundigen (geen coördinerende of specialistische taken),3,IIIa:Routine Nonmanual,3,NA
+3240,3227,Veterinaire assistenten en dierenartsassistenten,2,II :Lower Controllers,2,NA
+3251,3225,Tandartsassistenten en mondhygiënisten,2,II :Lower Controllers,2,NA
+3252,3229,Medewerkers medische registratie en medisch archief,2,II :Lower Controllers,2,NA
+3254,3224,Opticiens,2,II :Lower Controllers,2,NA
+3255,3226,Masseurs en assistenten fysio- en bewegingstherapie,2,II :Lower Controllers,2,NA
+3256,3221,Medische praktijkassistenten,2,II :Lower Controllers,2,NA
+3257,3152,"Inspecteurs veiligheid, gezondheid en voeding",2,II :Lower Controllers,2,NA
+3258,3152,Ambulancepersoneel,2,II :Lower Controllers,2,NA
+3312,3419,Medewerkers kredieten en leningen,2,II :Lower Controllers,2,NA
+3313,3433,"Boekhouders, financieel administrateurs en assistent accountants",3,IIIa:Routine Nonmanual,3,NA
+3314,3434,"Actuarieel, wiskundig en statistisch analisten",2,II :Lower Controllers,2,NA
+3315,3417,Taxateurs en schade-experts,2,II :Lower Controllers,2,NA
+3321,3412,Verzekeringsagenten,2,II :Lower Controllers,2,NA
+3322,3415,"Vertegenwoordigers, accountmanagers retail en exportmanagers",2,II :Lower Controllers,2,NA
+3323,3416,Inkopers,2,II :Lower Controllers,2,NA
+3331,3422,Inklaringsagenten en expediteurs,2,II :Lower Controllers,2,NA
+3332,3414,Organisatoren van conferenties en evenementen,2,II :Lower Controllers,2,NA
+3333,3423,Arbeidsbemiddelaars en uitzendbureaumedewerkers,2,II :Lower Controllers,2,NA
+3334,3413,Makelaars onroerend goed en vastgoedbeheerders,2,II :Lower Controllers,2,NA
+3339,3429,Zakelijke dienstverleners n.e.g.,2,II :Lower Controllers,2,NA
+3341,3431,Office managers,2,II :Lower Controllers,2,NA
+3342,3431,Juridisch secretaressen,2,II :Lower Controllers,2,NA
+3343,3431,"Directie-, project- en internationaal secretaressen",2,II :Lower Controllers,2,NA
+3344,3431,Medisch secretaressen,2,II :Lower Controllers,2,NA
+3351,3441,Douane-inspecteurs en grensbewakers,2,II :Lower Controllers,2,NA
+3352,3442,Ambtenaren belastingen en accijnzen,2,II :Lower Controllers,2,NA
+3353,3443,Ambtenaren sociale verzekeringen,2,II :Lower Controllers,2,NA
+3354,3444,Ambtenaren vergunningen,2,II :Lower Controllers,2,NA
+3355,3450,Politie-inspecteurs en rechercheurs,2,II :Lower Controllers,2,NA
+3359,3449,Overheidsambtenaren n.e.g.,2,II :Lower Controllers,2,NA
+3411,3432,Notarieel en juridisch assistenten en deurwaarders,2,II :Lower Controllers,2,NA
+3412,3460,"Sociaal werkers, groeps- en woonbegeleiders",3,IIIa:Routine Nonmanual,3,NA
+3413,3480,Pastoraal werkers,3,IIIa:Routine Nonmanual,3,NA
+3421,3475,Atleten en andere sportbeoefenaren,2,II :Lower Controllers,2,NA
+3422,3475,Sporttrainers en zweminstructeurs,2,II :Lower Controllers,2,NA
+3423,3340,Fitnessinstructeurs en leiders van recreatieprogramma's,3,IIIa:Routine Nonmanual,3,NA
+3431,3131,Fotografen,2,II :Lower Controllers,2,NA
+3432,3471,Interieurontwerpers en decorateurs,2,II :Lower Controllers,2,NA
+3433,3470,"Vakspecialisten galerieën, musea en bibliotheken",2,II :Lower Controllers,2,NA
+3434,5122,Chef-koks,8,VI :Skilled Worker,8,NA
+3435,3470,Vakspecialisten televisie- en theaterproductie,2,II :Lower Controllers,2,NA
+3512,3121,Gebruikersondersteuners ICT en ICT-helpdeskmedewerkers,2,II :Lower Controllers,2,NA
+3513,2139,Netwerk- en systeemtechnici,2,II :Lower Controllers,2,NA
+3521,3130,Beeld- en geluidstechnici radio en televisie,2,II :Lower Controllers,2,NA
+3522,3114,Telecommunicatievakspecialisten,2,II :Lower Controllers,2,NA
+4110,4100,"Administratief medewerkers, algemeen",3,IIIa:Routine Nonmanual,3,NA
+4120,4115,"Secretarieel medewerkers, algemeen",3,IIIa:Routine Nonmanual,3,NA
+4131,4112,Typisten en tekstverwerkers,3,IIIa:Routine Nonmanual,3,NA
+4132,4113,Medewerkers data-invoer,3,IIIa:Routine Nonmanual,3,NA
+4211,4211,Kassiers en baliemedewerkers bank,4,IIIb:Lower Sales-Service,4,NA
+4214,4215,Incassomedewerkers,4,IIIb:Lower Sales-Service,4,NA
+4221,3414,Reisconsulenten en reisbureaumedewerkers,2,II :Lower Controllers,2,NA
+4222,4222,Callcentermedewerkers inbound,3,IIIa:Routine Nonmanual,3,NA
+4223,4223,Telefonisten,3,IIIa:Routine Nonmanual,3,NA
+4224,4222,Hotelreceptionisten,3,IIIa:Routine Nonmanual,3,NA
+4225,4222,Informatieverstrekkers,3,IIIa:Routine Nonmanual,3,NA
+4226,4222,"Receptionisten, algemeen",3,IIIa:Routine Nonmanual,3,NA
+4227,4190,Interviewers voor enquêtes en marktonderzoek,4,IIIb:Lower Sales-Service,4,NA
+4311,4121,Boekhoudkundig medewerkers,3,IIIa:Routine Nonmanual,3,NA
+4312,4122,"Administratief medewerkers statistiek, financiën en verzekeringen",3,IIIa:Routine Nonmanual,3,NA
+4313,4121,Loonadministrateurs,3,IIIa:Routine Nonmanual,3,NA
+4321,4131,"Logistiek medewerkers, medewerkers materiaal-, voorraadplanning en -beheer",3,IIIa:Routine Nonmanual,3,NA
+4322,4132,"Werkvoorbereiders, productieplanners en orderbegeleiders",3,IIIa:Routine Nonmanual,3,NA
+4323,4133,Transportplanners,3,IIIa:Routine Nonmanual,3,NA
+4411,4141,Bibliotheekmedewerkers,3,IIIa:Routine Nonmanual,3,NA
+4412,4142,Postboden en postsorteerders,9,VIIa:Unskilled Worker,9,NA
+4413,4143,"Codeurs, correctoren",3,IIIa:Routine Nonmanual,3,NA
+4415,4141,Archiverings- en kopieermedewerkers,3,IIIa:Routine Nonmanual,3,NA
+4416,4190,Medewerkers personeelsadministratie,4,IIIb:Lower Sales-Service,4,NA
+4419,4190,Administratief assistenten n.e.g.,4,IIIb:Lower Sales-Service,4,NA
+5111,5111,Reisbegeleiders en stewards,4,IIIb:Lower Sales-Service,4,NA
+5112,5112,Conducteurs,4,IIIb:Lower Sales-Service,4,NA
+5113,5113,Reisleiders en gidsen,4,IIIb:Lower Sales-Service,4,NA
+5120,5122,Koks,8,VI :Skilled Worker,8,NA
+5130,5120,Kelners en barpersoneel z.n.d.,4,IIIb:Lower Sales-Service,4,NA
+5131,5123,Medewerkers bediening horeca,4,IIIb:Lower Sales-Service,4,NA
+5132,5123,Barpersoneel,4,IIIb:Lower Sales-Service,4,NA
+5141,5141,Kappers,8,VI :Skilled Worker,8,NA
+5142,5141,Schoonheidsspecialisten,8,VI :Skilled Worker,8,NA
+5151,5121,Teamleiders huishoudelijke diensten en schoonmaak,4,IIIb:Lower Sales-Service,4,NA
+5153,9141,Conciërges,9,VIIa:Unskilled Worker,9,NA
+5163,5143,Uitvaartmedewerkers en balsemers,8,VI :Skilled Worker,8,NA
+5164,5149,Dierverzorgers,4,IIIb:Lower Sales-Service,4,NA
+5165,3340,Rij-instructeurs,3,IIIa:Routine Nonmanual,3,NA
+5169,5149,Verleners van persoonlijke diensten n.e.g.,4,IIIb:Lower Sales-Service,4,NA
+5211,5230,Markt- en kioskverkopers,4,IIIb:Lower Sales-Service,4,NA
+5221,1314,Winkeliers,2,II :Lower Controllers,2,NA
+5222,1314,Teamleiders detailhandel,2,II :Lower Controllers,2,NA
+5223,5220,Verkoopmedewerkers detailhandel,4,IIIb:Lower Sales-Service,4,NA
+5230,4211,Kassamedewerkers en kaartverkopers,4,IIIb:Lower Sales-Service,4,NA
+5242,5220,Demonstrateurs,4,IIIb:Lower Sales-Service,4,NA
+5244,9113,Callcentermedewerkers outbound,3,IIIa:Routine Nonmanual,3,NA
+5246,5123,Verkopers in fastfoodrestaurants en snackbars,4,IIIb:Lower Sales-Service,4,NA
+5311,5131,Kinderverzorgers,4,IIIb:Lower Sales-Service,4,NA
+5312,5131,Onderwijsassistenten,4,IIIb:Lower Sales-Service,4,NA
+5320,5130,Verzorgend personeel in de gezondheidszorg z.n.d.,4,IIIb:Lower Sales-Service,4,NA
+5321,5132,Verzorgenden intramuraal,4,IIIb:Lower Sales-Service,4,NA
+5322,5133,Verzorgenden thuiszorg,4,IIIb:Lower Sales-Service,4,NA
+5411,5161,Brandweerlieden,8,VI :Skilled Worker,8,NA
+5412,5162,Politiepersoneel,8,VI :Skilled Worker,8,NA
+5413,5163,Gevangenbewaarders,9,VIIa:Unskilled Worker,9,NA
+5414,5169,Beveiligingspersoneel,9,VIIa:Unskilled Worker,9,NA
+5419,5169,"Parkeerwachters, strandwachten en beveiligingswerkers n.e.g.",9,VIIa:Unskilled Worker,9,NA
+6100,6100,"Tuinders, akkerbouwers en veetelers z.n.d.",10,VIIb:Farm Labor,11,NA
+6111,6111,Akkerbouwers en groentetelers volle grond,10,VIIb:Farm Labor,11,NA
+6113,6113,"Hoveniers, tuinders en kwekers",10,VIIb:Farm Labor,11,NA
+6121,6124,Veehouders m.u.v. pluimvee,10,VIIb:Farm Labor,11,NA
+6122,6122,Pluimveehouders,10,VIIb:Farm Labor,11,NA
+6123,6123,Bijenhouders en telers van andere insecten en wormen,10,VIIb:Farm Labor,11,NA
+6130,6130,Agrariërs gemengd bedrijf,10,VIIb:Farm Labor,11,NA
+6222,6152,Vissers in binnen- en kustwateren,10,VIIb:Farm Labor,10,NA
+7000,7000,Ambachtslieden z.n.d.,8,VI :Skilled Worker,8,NA
+7100,7100,"Bouwarbeiders, m.u.v. elektriciens z.n.d.",8,VI :Skilled Worker,8,NA
+7111,7129,"Allround bouwvakkers, kleine bouwaannemers",8,VI :Skilled Worker,8,NA
+7112,7122,"Stratenmakers, metselaars",9,VIIa:Unskilled Worker,9,NA
+7114,7123,"Betonwerkers, betonafwerkers",9,VIIa:Unskilled Worker,9,NA
+7115,7124,Timmerlieden,8,VI :Skilled Worker,8,NA
+7119,7129,"Steigerbouwers, bouwarbeiders ruwbouw n.e.g.",8,VI :Skilled Worker,8,NA
+7121,7131,Dakdekkers,9,VIIa:Unskilled Worker,9,NA
+7122,7132,Vloerleggers en tegelzetters,8,VI :Skilled Worker,8,NA
+7123,7133,Stukadoors,8,VI :Skilled Worker,8,NA
+7125,7135,Glaszetters,9,VIIa:Unskilled Worker,9,NA
+7126,7136,Loodgieters en pijpfitters,8,VI :Skilled Worker,8,NA
+7131,7141,Schilders en behangers,8,VI :Skilled Worker,8,NA
+7132,7142,Verf- en lakspuiters,9,VIIa:Unskilled Worker,9,NA
+7211,7211,Metaalgieters en kernmakers,8,VI :Skilled Worker,8,NA
+7212,7212,Lassers en snijders,8,VI :Skilled Worker,8,NA
+7213,7213,Plaatwerkers,8,VI :Skilled Worker,8,NA
+7214,7214,Constructiewerkers,8,VI :Skilled Worker,8,NA
+7221,7221,"Smeden, voorslagers en smeedperswerkers",8,VI :Skilled Worker,8,NA
+7222,7222,Gereedschapsmakers,8,VI :Skilled Worker,8,NA
+7223,7223,Machinestellers en -bedieners metaalproduktvervaardiging,8,VI :Skilled Worker,8,NA
+7224,7224,"Metaalpolijsters, -slijpers en gereedschapslijpers",8,VI :Skilled Worker,8,NA
+7230,7230,"Machinemonteurs, montage en reparatie z.n.d.",8,VI :Skilled Worker,8,NA
+7231,7231,Automonteurs,8,VI :Skilled Worker,8,NA
+7232,7232,Vliegtuigmonteurs,8,VI :Skilled Worker,8,NA
+7233,7233,Monteurs industriële en landbouwmachines,8,VI :Skilled Worker,8,NA
+7234,7231,Rijwielmonteurs,8,VI :Skilled Worker,8,NA
+7311,7311,Fijninstrumentmakers en -reparateurs,8,VI :Skilled Worker,8,NA
+7318,7332,"Ambachtslieden werkend met textiel, leder",9,VIIa:Unskilled Worker,9,NA
+7321,7340,Drukwerkvoorbereiders,8,VI :Skilled Worker,8,NA
+7322,7340,Drukkers,8,VI :Skilled Worker,8,NA
+7323,7345,Grafisch nabewerkers en boekbinders,8,VI :Skilled Worker,8,NA
+7411,7137,Elektriciens gebouwaansluitingen,8,VI :Skilled Worker,8,NA
+7412,7241,"Elektromonteurs voertuigen, machines, motoren",8,VI :Skilled Worker,8,NA
+7413,7245,Monteur elektriciteitsnetten,8,VI :Skilled Worker,8,NA
+7422,7243,Monteurs ICT en telecommunicatie,8,VI :Skilled Worker,8,NA
+7511,7411,"Slagers, vishandelaren",8,VI :Skilled Worker,8,NA
+7512,7412,Bakkers en banketbakkers,8,VI :Skilled Worker,8,NA
+7513,7413,Zuivelbereiders,8,VI :Skilled Worker,8,NA
+7522,7422,Meubelmakers,8,VI :Skilled Worker,8,NA
+7530,7430,"Kleermakers, stoffeerders, schoenmakers z.n.d.",8,VI :Skilled Worker,8,NA
+7531,7434,"Kleermakers, bontwerkers en hoedenmakers",8,VI :Skilled Worker,8,NA
+7534,7437,Stoffeerders,8,VI :Skilled Worker,8,NA
+7536,7442,Schoenmakers,8,VI :Skilled Worker,8,NA
+7543,3152,Productcontroleurs non-food,2,II :Lower Controllers,2,NA
+7549,7000,Ambachtslieden n.e.g.,8,VI :Skilled Worker,8,NA
+8000,8000,"Bedieners machines en installaties, assemblagemedewerkers z.n.d.",9,VIIa:Unskilled Worker,9,NA
+8100,8100,Bedieners vaste machines en installaties z.n.d.,9,VIIa:Unskilled Worker,9,NA
+8111,7111,Delfstoffenwinnaars,8,VI :Skilled Worker,8,NA
+8122,8223,Machinebedieners oppervlaktebehandelingen van metalen,9,VIIa:Unskilled Worker,9,NA
+8132,8224,Machinebedieners fotolaboratorium,9,VIIa:Unskilled Worker,9,NA
+8157,8264,Wasmachinebedieners,9,VIIa:Unskilled Worker,9,NA
+8160,8270,Machinebedieners vervaardiging voedingsmiddelen,9,VIIa:Unskilled Worker,9,NA
+8171,8140,Machinebedieners vervaardiging papierpulp en papier,9,VIIa:Unskilled Worker,9,NA
+8189,8290,Bedieners stationaire machines en installaties n.e.g.,9,VIIa:Unskilled Worker,9,NA
+8219,8290,Assemblagemedewerkers n.e.g.,9,VIIa:Unskilled Worker,9,NA
+8300,8300,Bestuurders voertuigen en bedieners mobiele installaties z.n.d.,9,VIIa:Unskilled Worker,9,NA
+8311,8311,Treinmachinisten,8,VI :Skilled Worker,8,NA
+8312,8312,"Remmers, sein en wisselwachters",9,VIIa:Unskilled Worker,9,NA
+8322,8322,"Chauffeurs auto's, taxi's en bestelwagens",9,VIIa:Unskilled Worker,9,NA
+8331,8323,Buschauffeurs en trambestuurders,9,VIIa:Unskilled Worker,9,NA
+8332,8324,Vrachtwagenchauffeurs,9,VIIa:Unskilled Worker,9,NA
+8341,8331,Bedieners mobiele land- en bosbouwmachines,10,VIIb:Farm Labor,10,NA
+8342,8332,Bedieners grondverzetmachines,8,VI :Skilled Worker,8,NA
+8343,8333,Kraandrijvers en bedieningspersoneel mobiele kranen,8,VI :Skilled Worker,8,NA
+8344,8334,Heftruckchauffeurs,9,VIIa:Unskilled Worker,9,NA
+8350,8340,Dekpersoneel op schepen,9,VIIa:Unskilled Worker,9,NA
+9111,9131,Schoonmakers in huishoudens,9,VIIa:Unskilled Worker,9,NA
+9112,9132,"Schoonmakers in hotels, kantoren",9,VIIa:Unskilled Worker,9,NA
+9123,9142,Glazenwassers,9,VIIa:Unskilled Worker,9,NA
+9129,9140,"Industrieel schoonmakers, stralers, rioolreinigers en schoonmakers n.e.g.",9,VIIa:Unskilled Worker,9,NA
+9211,9211,Hulparbeiders akkerbouw,10,VIIb:Farm Labor,10,NA
+9212,9211,Hulparbeiders veeteelt,10,VIIb:Farm Labor,10,NA
+9213,9211,Hulparbeiders op gemengde bedrijven,10,VIIb:Farm Labor,10,NA
+9214,9211,Hulparbeiders tuinbouw,10,VIIb:Farm Labor,10,NA
+9312,9312,Hulparbeiders weg- en waterbouw,9,VIIa:Unskilled Worker,9,NA
+9313,9313,Bouwvakhulpen,9,VIIa:Unskilled Worker,9,NA
+9321,9322,Inpakkers,9,VIIa:Unskilled Worker,9,NA
+9329,9320,Hulparbeiders industrie n.e.g.,9,VIIa:Unskilled Worker,9,NA
+9333,9333,Laders en lossers,9,VIIa:Unskilled Worker,9,NA
+9334,9333,Vakkenvullers,9,VIIa:Unskilled Worker,9,NA
+9411,5122,Fastfoodbereiders,8,VI :Skilled Worker,8,NA
+9412,9132,Keukenhulpen,9,VIIa:Unskilled Worker,9,NA
+9611,9161,Vuilnisophalers en ophalers van afval voor recycling,9,VIIa:Unskilled Worker,9,NA
+9613,9162,Straatvegers,9,VIIa:Unskilled Worker,9,NA
+9621,9151,"Boden, kruiers en bestellers",9,VIIa:Unskilled Worker,9,NA
+9622,9160,Losse arbeiders,9,VIIa:Unskilled Worker,9,NA
+9629,9100,Elementaire beroepen n.e.g.,3,IIIa:Routine Nonmanual,3,NA

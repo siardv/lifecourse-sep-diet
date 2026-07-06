@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite it as below."
+type: software
+title: "lifecourse-sep-diet: life-course socioeconomic position and diet quality (reproducible analysis pipeline)"
+authors:
+  - family-names: "Bosch"
+    name-particle: "van den"
+    given-names: "Siard"
+    email: "siardvandenbosch@me.com"
+license: MIT
+version: "1.0.0"
+date-released: "2026-07-06"
+repository-code: "https://github.com/siardv/lifecourse-sep-diet"
+url: "https://siardv.github.io/lifecourse-sep-diet/"

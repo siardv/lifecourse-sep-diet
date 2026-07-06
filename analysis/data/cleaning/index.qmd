@@ -1,0 +1,1818 @@
+---
+title: "Data Cleaning & Recoding"
+subtitle: "Transforming Variables for Consistency and Imputation Readiness"
+author: "Siard van den Bosch"
+date: 2024-08-26
+date-modified: last-modified
+---
+
+```{=html}
+<script>
+  window.config = {offset: 3};
+</script>
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+|                |         |
+| -------------- | ------- |
+| **Purpose**    | Recode variables, screen missingness, and construct SES composites for imputation |
+| **Inputs**     | `main_corrected.sav` |
+| **Outputs**    | `data_for_imputation.sav` |
+| **Method**     | Variable recoding; MCAR diagnostic; psychometric scale evaluation |
+| **Requires**   | [Step 2 (ISCO-08 Standardization)](/analysis/data/preparation/index.qmd) |
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+::: {.callout-note icon=false}
+## Rationale
+
+- Critical-missing exclusion: drop cases missing both DHD index and kilocalories rather than impute pivotal variables [@enders2010]
+- Retention threshold: 20% per-case missingness cap balances sample retention against imputation quality [@schafer2002]
+- Structural missingness: partner indicators set to NA for unpartnered respondents to separate from MAR [@little1988]
+- Domain-specific SES: education and occupation index distinct mechanisms (cultural capital vs. material resources) [@galobardes2006]
+- Scale validity criteria: $\alpha$, AVE, Fornell-Larcker, and HTMT follow established psychometric frameworks [@fornell1981]
+:::
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+```{r}
+#| label: load-project-resources
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# clear global env and force full garbage collection
+rm(list = ls(envir = .GlobalEnv), envir = .GlobalEnv)
+invisible(gc(full = TRUE))
+
+# detach non-base packages to avoid namespace interference
+invisible(lapply(grep(":|autoloads|globalenv", search(),
+  invert = TRUE, value = TRUE, ignore.case = TRUE
+), detach, character.only = TRUE, unload = TRUE, force = TRUE))
+
+# source custom functions for data processing and analysis
+purrr::walk(file.path(here::here("assets", "functions"), paste0(c(
+  "md_to_html", "format_coef", "as_kable", "describe", "sci_to_tex",
+  "add_style", "footnote", "order_array", "numeric_df", "update_isco08r",
+  "brc14_map", "import_pipes", "update_value_label", "labels_to_string",
+  "format_p_value", "set_globals", "isco08_to_jobtitle", "update_brc14",
+  "frequency_table", "beautify_names", "summarize_na", "suppress_output"
+), ".R")), source)
+
+# set global options and import pipe operators
+set_globals()
+import_pipes()
+
+# load corrected dataset from step 2 and adjust variable types
+main <- haven::read_sav(
+  here::here("assets", "data", "saved", "main_corrected.sav"),
+  user_na = TRUE
+) %>%
+  dplyr::mutate(dplyr::across(dplyr::starts_with("brc14"), as.integer)) %>%
+  dplyr::select(-dplyr::matches("(_cleaned|_init)$|_old"))
+```
+
+## Select Variables for Analysis
+
+Excludes character-type, derived, and previously-recoded variables; retains identifiers and analytic indicators.
+
+```{r}
+#| label: filter-select-variables
+#| tbl-cap: Variables Excluded from Imputation
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# standardize variable names to lowercase
+names(main) %<>% tolower()
+
+# summarize missing values for each variable
+missing_values_summary <- summarize_na(main)
+
+# function to determine variable type from character representation
+# Update this function in your Quarto file
+get_variable_type <- function(x, ...) {
+  # Convert haven_labelled to plain numeric or character first
+  if (inherits(x, "haven_labelled")) {
+    x <- haven::zap_labels(x)
+  }
+  class(type.convert(as.character(x), as.is = TRUE))
+}
+
+# derived variables to exclude from imputation (identifiers, computed composites)
+derived_variables <- c(
+  "idnummer", "crowding", "hh_comp", "hh_members", "eq_size",
+  "income_hh_num", "income_hh_eq", "children_hh_yes"
+)
+
+# create dataframe with variable types and exclusion flags
+column_types <- stack(sapply(main, get_variable_type))[2:1]
+names(column_types) <- c("variable", "character")
+
+# patterns for identifying recoded or classification variables
+exclusion_patterns <- paste(
+  ".*_(cat|rec)$",
+  "^ses_index.*",
+  "^isco[2008]+[^r].*",
+  "^brc14[_a-z]*",
+  "^skill_level",
+  sep = "|"
+)
+
+# flag variables as character, recoded, or derived
+column_types[c("character", "recoded", "derived")] <- lapply(list(
+  column_types$character == "character",
+  grepl(exclusion_patterns, column_types$variable),
+  column_types$variable %in% derived_variables
+), as.integer)
+
+# determine which variables to keep (no exclusion flags set)
+column_types$keep <- rowSums(column_types[, -1]) == 0
+
+# merge with missing values summary for complete variable info
+variable_info <- column_types %>%
+  dplyr::mutate(dplyr::across(
+    -variable,
+    ~ c("\u00b7", "\u00d7")[as.numeric(.) + 1]
+  )) %>%
+  dplyr::inner_join(missing_values_summary, by = "variable")
+
+# mark occupational classification variables to keep despite exclusion flags;
+# lf_status_* are character and would otherwise be dropped by the character flag
+variable_info[grep("isco08r|brc14|isei08|siops08|egp11|lf_status", variable_info$variable), "keep"] <- "\u00d7"
+
+# sort for display: kept variables first, then by exclusion reason
+d <- dplyr::desc
+variable_info %<>%
+  dplyr::mutate(kd = as.integer(paste0(keep, derived) == "\u00d7\u00d7")) %>%
+  dplyr::arrange(d(keep), kd, d(derived), d(recoded)) %>%
+  dplyr::select(-kd)
+
+# subset data to keep only selected variables plus identifier
+data_cleaned <- main %>%
+  subset(select = c(
+    "idnummer",
+    variable_info$variable[variable_info$keep == "\u00d7"]
+  ))
+```
+
+
+```{r}
+#| label: filter-select-variables-attrs
+#| tbl-cap: Variables Excluded from Imputation
+#| code-fold: true
+#| column: body-outset-right
+
+col_names <- c(
+  "Variable", "Character", "Recoded", "Derived",
+  "Keep", "$\\textit{N}_{missing}$", "$\\%_{missing}$"
+)
+
+footnote_text <- glue(
+  "$N = {nrow(main)}$; $n = {nrow(variable_info)}$; ",
+  "The symbol '\u00d7' indicates that the variable meets the exclusion criteria ",
+  "specified in the column header. Variables that were recoded, character type, ",
+  "or derived were excluded from imputation."
+)
+
+# display exclusion summary table
+variable_info %>%
+  as_kable(omit_leading_zero = FALSE) %>%
+  kableExtra::add_header_above(
+    c(" " = 1, "Reasons for Exclusion" = 3, " " = 3)
+  ) %>%
+  footnote() %>%
+  add_style()
+```
+
+## Recode Variables for Analysis
+
+Transformations enforce consistent directionality, with higher values denoting greater exposure or difficulty.
+
+### Number of Children in Household
+
+```{r}
+#| label: tbl-children-hh
+#| tbl-cap: "Distribution of the Number of Children in the Household"
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+footnote_text <- labels_to_string(data_cleaned, "children_hh")
+
+# recode to start from zero (original: 1 = 0 children, 2 = 1 child, etc.)
+data_cleaned %<>%
+  dplyr::mutate(num_children_hh = children_hh - 1) %T>%
+  frequency_table("num_children_hh")
+```
+
+### Smoking Habit
+
+```{r}
+#| label: tbl-smoking
+#| tbl-cap: "Distribution of Smoking Habit"
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+footnote_text <- labels_to_string(data_cleaned, "q63")
+
+# recode smoking status: 0 = never, 1 = former, 2 = current
+data_cleaned %<>%
+  dplyr::mutate(smoking = labelled::labelled(
+    as.numeric(q63) - 1,
+    c("No, never did" = 0, "No, but used to" = 1, "Yes" = 2)
+  )) %T>%
+  frequency_table("smoking")
+```
+
+### Week Normality Indicator
+
+```{r}
+#| label: tbl-normal-week
+#| tbl-cap: "Normality of Surveyed Week"
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+footnote_text <- labels_to_string(data_cleaned, "q79")
+
+# recode to binary: 1 = normal week, 0 = not normal (original: 2 = not normal)
+data_cleaned %<>%
+  dplyr::mutate(normal_week = labelled::labelled(
+    as.integer(q79 != 2), c("No" = 0, "Yes" = 1)
+  )) %T>%
+  frequency_table("normal_week")
+
+# validate recoding produced expected values only
+if (any(!data_cleaned$normal_week %in% c(0, 1, NA), na.rm = TRUE)) {
+  warning("Unexpected values found in normal_week after recoding")
+}
+```
+
+### Home Ownership Status
+
+```{r}
+#| label: tbl-home-ownership
+#| tbl-cap: "Home Ownership Status"
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+footnote_text <- labels_to_string(data_cleaned, "q35")
+
+# recode to binary: 1 = owner, 0 = not owner (original: 1 = owner)
+data_cleaned %<>%
+  dplyr::mutate(home_owner = labelled::labelled(
+    as.integer(q35 == 1), c("No" = 0, "Yes" = 1)
+  )) %T>%
+  frequency_table("home_owner")
+```
+
+### Gender of Respondent
+
+```{r}
+#| label: tbl-gender
+#| tbl-cap: "Gender (Respondent is Woman)"
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+footnote_text <- labels_to_string(data_cleaned, "gender")
+
+# recode to binary: 1 = woman, 0 = man (original: 1 = woman)
+data_cleaned %<>%
+  dplyr::mutate(woman = labelled::labelled(
+    as.integer(gender == 1), c("Man" = 0, "Woman" = 1)
+  )) %T>%
+  frequency_table("woman")
+```
+
+### Difficulty Living from Income
+
+```{r}
+#| label: tbl-difficulty-living-income
+#| tbl-cap: "Difficulty Living from Income"
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+footnote_text <- labels_to_string(data_cleaned, "diff_live_income")
+
+# reverse code: 0 = very easy (no difficulty) to 3 = great difficulty
+data_cleaned %<>%
+  dplyr::mutate(diff_live_income = labelled::labelled(
+    4 - as.integer(diff_live_income),
+    c(
+      "Very easy (no difficulty)" = 0, "Relatively easy" = 1,
+      "Some difficulty" = 2, "Great difficulty" = 3
+    )
+  )) %T>%
+  frequency_table("diff_live_income")
+
+# validate recoding produced expected values only (missing excluded)
+if (any(!na.omit(as.integer(data_cleaned$diff_live_income)) %in% 0:3)) {
+  warning("Unexpected values after recoding")
+}
+```
+
+### Difficulty Paying Regular Bills
+
+```{r}
+#| label: tbl-difficulty-paying-bills
+#| tbl-cap: "Difficulty Paying Regular Bills"
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+footnote_text <- labels_to_string(data_cleaned, "diff_pay_bills")
+
+# recode to 0-2 scale: 0 = no difficulty, 1 = some, 2 = great difficulty
+data_cleaned %<>%
+  dplyr::mutate(diff_pay_bills = labelled::labelled(
+    as.integer(diff_pay_bills) - 1,
+    c(
+      "No, no difficulty at all" = 0,
+      "Some difficulty" = 1,
+      "Yes, great difficulty" = 2
+    )
+  )) %T>%
+  frequency_table("diff_pay_bills")
+
+# validate recoding produced expected values only (missing excluded)
+if (any(!na.omit(as.integer(data_cleaned$diff_pay_bills)) %in% 0:2)) {
+  warning("Unexpected values after recoding")
+}
+```
+
+### Education Level
+
+```{r}
+#| label: education-recoding
+#| code-fold: show
+#| column: body-outset-right
+
+# education labels for recoded scale
+# 0 = no education, 6 = higher professional
+education_labels <- c(
+  "no education" = 0,
+  "primary school" = 1,
+  "lower vocational education" = 2,
+  "general secondary education" = 3,
+  "secondary vocational education" = 4,
+  "higher general secondary education" = 5,
+  "higher professional education" = 6
+)
+
+# recode all education variables to start from 0
+data_cleaned <- data_cleaned %>%
+  dplyr::mutate(
+    dplyr::across(
+      dplyr::matches("^education($|_)"),
+      ~ {
+        x <- as.numeric(.)
+        x[!is.na(x)] <- x[!is.na(x)] - 1
+        out <- labelled::labelled(x, education_labels)
+        attr(out, "label") <- attr(., "label")
+        out
+      }
+    )
+  )
+```
+
+```{r}
+#| label: tbl-respondent-education
+#| tbl-cap: "Respondent's Education Level"
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+footnote_text <- labels_to_string(data_cleaned, "education")
+invisible(data_cleaned %T>% frequency_table("education"))
+```
+
+```{r}
+#| label: tbl-mother-education
+#| tbl-cap: "Mother's Education Level"
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+footnote_text <- labels_to_string(data_cleaned, "education_mother")
+invisible(data_cleaned %T>% frequency_table("education_mother"))
+```
+
+```{r}
+#| label: tbl-father-education
+#| tbl-cap: "Father's Education Level"
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+footnote_text <- labels_to_string(data_cleaned, "education_father")
+invisible(data_cleaned %T>% frequency_table("education_father"))
+```
+
+### Partner Status
+
+```{r}
+#| label: tbl-partner-status
+#| tbl-cap: "Partner Status"
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+footnote_text <- labels_to_string(data_cleaned, "partneryn")
+
+# recode to binary: 1 = has partner, 0 = no partner
+data_cleaned <- data_cleaned %>%
+  dplyr::mutate(partner = haven::labelled(
+    as.integer(partneryn == 1),
+    c("No" = 0, "Yes" = 1)
+  )) %T>%
+  frequency_table("partner")
+```
+
+```{r}
+#| label: drop-original-variables-after-recoding
+#| code-fold: true
+#| column: body-outset-right
+
+# remove original variables post-recoding to avoid redundancy
+data_cleaned %<>%
+  dplyr::select(-children_hh, -q63, -q79, -q35, -gender, -partneryn)
+```
+
+### Handle Partner-Specific Variables
+
+```{r}
+#| label: tbl-partner-education
+#| tbl-cap: "Partner's Education Level"
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+# set partner education and occupation to NA for respondents without partners
+data_cleaned %<>%
+  dplyr::mutate(dplyr::across(
+    c(isei08_partner, education_partner),
+    ~ dplyr::if_else(partner == 0, NA_real_, .)
+  )) %>%
+  labelled::drop_unused_value_labels()
+
+# update value label for structural missingness
+update_value_label(data_cleaned, "education_partner", NA_real_, "No partner")
+
+footnote_text <- glue(
+  "{labels_to_string(data_cleaned, 'education_partner')}<br><i>Note</i>: ",
+  "Missing values for partner's education were recoded to 'No partner' ",
+  "for respondents without a partner."
+)
+
+invisible(data_cleaned %T>% frequency_table("education_partner"))
+```
+
+```{r}
+#| label: define-classification-update-functions
+#| code-fold: show
+#| column: body-outset-right
+
+# update BRC14 variable labels from mapping table
+update_brc14 <- function(column_name, data, mapping) {
+  values <- unique(stats::na.omit(data[[column_name]]))
+  labels <- sapply(values, function(x) {
+    unique(mapping$BRC2014beroepsgroep_label[
+      as.numeric(mapping$BRC2014beroepsgroep) == x
+    ])
+  })
+  values_named <- setNames(values, labels)
+  for (i in seq_along(values_named)) {
+    eval.parent(substitute(
+      update_value_label(
+        data,
+        column_name,
+        as.numeric(values_named[i]),
+        names(values_named)[i]
+      )
+    ))
+  }
+}
+
+# label lookup for reconciled isco08r codes; labels come from the brc2014
+# crosswalk because the job-title package lookup does not know the z.n.d. and
+# aggregate codes now present (e.g. 0000, 1000, 2300, 6100, 7000, 8300)
+isco08_label_map <- readr::read_csv(
+  here::here("assets", "data", "brc2014_isco08_brc_crosswalk.csv"),
+  col_types = readr::cols(.default = readr::col_character()),
+  progress = FALSE
+) %>%
+  dplyr::transmute(
+    isco08 = stringr::str_pad(trimws(ISCO2008unitgroup), 4, pad = "0"),
+    label = ISCO2008unitgrouplabel
+  ) %>%
+  dplyr::distinct()
+
+# return the brc2014 label for numeric isco08r values; codes are matched as
+# four-character zero-padded text; an unknown code stops the render
+isco08_to_label <- function(x) {
+  code <- sprintf("%04d", as.integer(x))
+  label <- isco08_label_map$label[match(code, isco08_label_map$isco08)]
+  stopifnot(!anyNA(label))
+  label
+}
+
+# update ISCO-08 variable labels from the brc2014 crosswalk lookup
+update_isco08r <- function(column_name, data) {
+  values <- unique(stats::na.omit(data[[column_name]]))
+  labels <- isco08_to_label(values)
+  values_named <- setNames(values, labels)
+  for (i in seq_along(values_named)) {
+    eval.parent(substitute(
+      update_value_label(
+        data,
+        column_name,
+        as.numeric(values_named[i]),
+        names(values_named)[i]
+      )
+    ))
+  }
+}
+```
+
+```{r}
+#| label: update-occupational-classifications
+#| code-fold: show
+#| column: body-outset-right
+
+# set partner occupation to NA for respondents without partners
+data_cleaned$isco08r_partner[data_cleaned$partner == 0] <- NA
+
+# update value labels for ISCO-08 classifications
+update_isco08r("isco08r_partner", data_cleaned)
+update_value_label(data_cleaned, "isco08r_partner", NA, "No partner")
+update_isco08r("isco08r", data_cleaned)
+update_isco08r("isco08r_father", data_cleaned)
+update_isco08r("isco08r_mother", data_cleaned)
+
+# update value labels for BRC14 classifications
+brc14_map_data <- brc14_map()
+update_brc14("brc14", data_cleaned, brc14_map_data)
+update_brc14("brc14_mother", data_cleaned, brc14_map_data)
+update_brc14("brc14_father", data_cleaned, brc14_map_data)
+update_brc14("brc14_partner", data_cleaned, brc14_map_data)
+
+# set partner BRC14 and ISEI-08 to NA for respondents without partners
+data_cleaned$brc14_partner[data_cleaned$partner == 0] <- NA
+update_value_label(data_cleaned, "brc14_partner", NA, "No partner")
+data_cleaned$isei08_partner[data_cleaned$partner == 0] <- NA
+```
+
+## Assess Missing Data Patterns
+
+Little's MCAR test diagnoses whether missingness deviates from completely random.
+
+```{r}
+#| label: non-deterministic-data
+#| code-fold: show
+#| column: body-outset-right
+
+# select variables with non-deterministic missingness for MCAR test
+non_deterministic_data <- data_cleaned %>%
+  dplyr::select(where(~ sum(is.na(.)) > 0 & sum(is.na(.)) < nrow(data_cleaned)))
+
+if (ncol(non_deterministic_data) > 1) {
+  # perform MCAR test with error handling
+  mcar_test_result <- tryCatch(
+    naniar::mcar_test(non_deterministic_data),
+    error = function(e) {
+      message("Error in MCAR test: ", e$message)
+      return(NULL)
+    }
+  )
+  if (!is.null(mcar_test_result)) {
+    mcar_test_result %<>%
+      dplyr::mutate(p.value = format_p_value(p.value))
+  } else {
+    message("MCAR test could not be completed. Review the missing data structure.")
+  }
+} else {
+  message("Insufficient variability in missing data patterns for MCAR test.")
+}
+```
+
+
+```{r}
+#| label: tbl-mcar-test
+#| tbl-cap: "Results of Little's MCAR Tests"
+#| code-fold: true
+#| column: body-outset-right
+
+col_names <- c("$\\chi^2$", "$df$", "$p$", "Missing Patterns$^{1}$")
+
+footnote_text <- glue(
+  "$n={nrow(data_cleaned)}$;",
+  "a $p$-value $\\leq$ 0.001 indicates that data are not missing completely at random;",
+  "$^{1}$ Represents the number of missing data patterns."
+)
+
+mcar_test_result %>%
+  as_kable(align = "lllr") %>%
+  footnote() %>%
+  add_style()
+```
+
+### Exclude Cases with Critical Missing Data
+
+```{r}
+#| label: handle-missing-dhd-values
+#| code-fold: show
+#| column: body-outset-right
+
+# identify cases missing both outcome and key predictor
+cases_with_missing_dhd_values <- which(
+  is.na(data_cleaned$dhd_index) & is.na(data_cleaned$dhd_kcal)
+)
+
+percentage_missing <- length(cases_with_missing_dhd_values) / nrow(data_cleaned)
+
+# report exclusion statistics
+sentence_missing_dhd <- glue(
+  "Out of the total {nrow(data_cleaned)} respondents, ",
+  "{length(cases_with_missing_dhd_values)} had ",
+  "missing values for both the DHD index and DHD ",
+  "kcal ({round(percentage_missing * 100, 2)}%). ",
+  "These cases were excluded from further analysis."
+)
+
+htmltools::p(sentence_missing_dhd)
+```
+
+### Summarize Remaining Missing Data
+
+```{r}
+#| label: tbl-proportion-missing-values
+#| tbl-cap: "Overview of Missing Values After Excluding Cases Without DHD Values"
+#| code-fold: show
+#| column: body-outset-right
+
+# helper function to summarize missingness distribution
+summarize_missingness <- function(x) {
+  counts <- as.numeric(x)
+  props <- paste0(round(as.numeric(names(x)) * 100, 2), "%")
+  parts <- paste0(counts[-1], " (", props[-1], ")")
+  sentence <- glue(
+    "Out of the total {sum(counts)} ",
+    "respondents, {counts[1]} had no missing values, ",
+    "followed by {paste(parts, collapse = ', ')} ",
+    "with increasing proportions of missing values."
+  )
+  htmltools::HTML(as.character(htmltools::p(sentence)))
+}
+
+# subset data excluding cases with missing DHD values
+data_subset <- if (length(cases_with_missing_dhd_values) > 0) {
+  data_cleaned[-cases_with_missing_dhd_values, ]
+} else {
+  data_cleaned
+}
+
+# define table display parameters
+col_names <- c("Variable", rep(c(
+  "$n_{\\text{miss}}$",
+  "$\\%_{\\text{miss}}$"
+), 3))
+
+footnote_text <- glue(
+  "Missing values include both system-defined and ",
+  "user-defined values, ordered by highest missingness."
+)
+
+# summarize missingness stratified by partner status
+data_subset %>%
+  dplyr::select(-idnummer) %$%
+  list(
+    No_Partner = dplyr::filter(., partner == 0),
+    Partner = dplyr::filter(., partner == 1), .
+  ) %>%
+  purrr::map2(.y = names(.), ~ summarize_na(.x) %>%
+    setNames(c("var", paste0(names(.)[-1], "_", .y)))) %>%
+  Reduce(f = function(x, y) dplyr::full_join(x, y, by = "var")) %>%
+  dplyr::mutate(var = beautify_names(var)) %>%
+  as_kable() %>%
+  kableExtra::add_header_above(
+    c(" " = 1, "No Partner" = 2, "Partner" = 2, "Total" = 2)
+  ) %>%
+  footnote() %>%
+  add_style()
+```
+
+### Compute Proportional Missingness
+
+```{r}
+#| label: prop-missing-values
+#| code-fold: show
+#| column: body-outset-right
+
+# calculate proportion of missing values for key analysis variables
+# the reconciled score and status columns stay out of the ratio: siops08 and
+# egp11 would triple-count the occupational missingness already carried by
+# isei08, and lf_status is character with no NA; excluding them keeps the
+# 20% rule identical to the pre-reconciliation pipeline
+data_subset$prop_miss <- data_subset %>%
+  dplyr::select(
+    dplyr::matches("_(par|mot|fat)|^dhd|dif|inc|edu|isei", ignore.case = TRUE)
+  ) %>%
+  dplyr::select(-dplyr::matches("brc14|isco08|siops08|egp11|lf_status")) %>%
+  asplit(1) %>%
+  sapply(function(x) mean(is.na(x)))
+
+# tabulate proportions of missing values
+prop_miss_table <- table(data_subset$prop_miss)
+
+# display summary of missingness proportions
+summarize_missingness(prop_miss_table)
+
+# determine cutoff for imputation based on missingness proportion (>20%)
+# note: structural partner NAs count toward prop_miss, so non-partnered
+# respondents tolerate fewer additional missing values than partnered
+# respondents before exclusion
+cut_off <- min(unique(data_subset$prop_miss[data_subset$prop_miss > 0.2]))
+
+# filter data for imputation, excluding high missingness cases
+data_for_imputation <- data_subset %>%
+  dplyr::filter(prop_miss < cut_off) %>%
+  dplyr::select(-prop_miss)
+```
+
+## Generate Descriptive Statistics
+
+```{r}
+#| label: descriptive-stats-col-names
+#| code-fold: true
+#| column: body-outset-right
+
+col_names <- c(
+  "$\\ $", "$n$", "$\\bar{x}$", "$\\text{Min.}$", "$\\text{Max.}$",
+  "$SD$", "$\\text{Skewness}$", "$\\text{Kurtosis}$", "$SE$",
+  "$\\text{Normality}^{\\dagger}$"
+)
+
+footnote_text <- glue(
+  "Shapiro-Wilk Test$^{{\\dagger}}$;",
+  "values are normality test statistics (Shapiro-Wilk $W$ for $n \\leq 5000$, Lilliefors $D$ otherwise); ",
+  "smaller $W$ (larger $D$) suggests stronger departure from normality;",
+  "'&#x2014;' indicates variables with $\\leq 4$ unique values (normality test not applicable)"
+)
+```
+
+```{r}
+#| label: tbl-descriptive-stats-before-outlier-removal
+#| tbl-cap: "Descriptive Statistics Before Outlier Removal"
+#| code-fold: show
+#| column: body-outset-right
+
+# generate descriptive statistics for imputation dataset
+data_for_imputation %>%
+  dplyr::select(-idnummer) %>%
+  setNames(beautify_names(names(.))) %>%
+  describe(
+    normality = TRUE,
+    print_only = FALSE
+  ) %>%
+  dplyr::rowwise() %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-p) %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+## Evaluate SES Composite Scale Validity {#sec-ses-validity}
+
+Compares composite and domain-specific operationalizations across reliability, factor structure, and discriminant validity criteria.
+
+### Prepare SES Indicators
+
+```{r}
+#| label: ses-indicator-preparation
+#| code-fold: show
+#| column: body-outset-right
+
+# extract SES indicators for psychometric evaluation
+ses_indicators <- data_for_imputation %>%
+  dplyr::select(
+    edu_father = education_father,
+    edu_mother = education_mother,
+    occ_father = isei08_father,
+    occ_mother = isei08_mother,
+    edu_partner = education_partner,
+    occ_partner = isei08_partner,
+    partner
+  )
+
+# create analysis subsets for different scale configurations
+parental_indicators <- ses_indicators %>%
+  dplyr::select(edu_father, edu_mother, occ_father, occ_mother)
+
+# partner indicators restricted to partnered respondents
+partner_indicators <- ses_indicators %>%
+  dplyr::filter(partner == 1) %>%
+  dplyr::select(edu_partner, occ_partner)
+
+# combined indicators for full model testing (partnered respondents only)
+combined_indicators <- ses_indicators %>%
+  dplyr::filter(partner == 1) %>%
+  dplyr::select(-partner)
+```
+
+```{r}
+#| label: tbl-ses-sample-sizes
+#| tbl-cap: "Sample Sizes for SES Scale Validation"
+#| code-fold: true
+#| column: body-outset-right
+
+sample_info <- tibble::tibble(
+  Subset = c("Total sample", "Partnered respondents", "Parental complete cases"),
+  n = c(
+    nrow(ses_indicators),
+    sum(ses_indicators$partner == 1, na.rm = TRUE),
+    sum(stats::complete.cases(parental_indicators))
+  )
+)
+
+footnote_text <- "Sample sizes for validity and reliability analyses."
+
+sample_info %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+### Descriptive Statistics of SES Indicators
+
+```{r}
+#| label: ses-descriptives-tbl-labels
+#| code-fold: true
+#| column: body-outset-right
+
+col_names <- c(
+  "Indicator", "$n$", "$n_{miss}$", "$\\%_{miss}$",
+  "$\\bar{x}$", "$SD$", "Min", "Max", "Skew", "Kurt", "Domain"
+)
+
+footnote_text <- glue(
+  "$N = {nrow(parental_indicators)}$; ",
+  "Education = educational attainment (ordinal, 0-6); ",
+  "Occupation = ISEI-08 occupational status (continuous, 16-90)."
+)
+```
+
+```{r}
+#| label: tbl-ses-descriptives
+#| tbl-cap: "Descriptive Statistics of Parental SES Indicators"
+#| code-fold: show
+#| column: body-outset-right
+
+# function to compute descriptive statistics for SES indicators
+compute_ses_descriptives <- function(data) {
+  data %>%
+    tidyr::pivot_longer(
+      cols = dplyr::everything(),
+      names_to = "indicator",
+      values_to = "value"
+    ) %>%
+    dplyr::group_by(indicator) %>%
+    dplyr::summarise(
+      n = sum(!is.na(value)),
+      n_miss = sum(is.na(value)),
+      pct_miss = round(100 * mean(is.na(value)), 1),
+      mean = round(mean(value, na.rm = TRUE), 2),
+      sd = round(sd(value, na.rm = TRUE), 2),
+      min = min(value, na.rm = TRUE),
+      max = max(value, na.rm = TRUE),
+      skew = round(moments::skewness(value, na.rm = TRUE), 2),
+      kurt = round(moments::kurtosis(value, na.rm = TRUE), 2),
+      .groups = "drop"
+    ) %>%
+    dplyr::mutate(
+      domain = dplyr::case_when(
+        grepl("edu", indicator) ~ "Education",
+        grepl("occ", indicator) ~ "Occupation",
+        TRUE ~ NA_character_
+      )
+    ) %>%
+    dplyr::arrange(domain, indicator)
+}
+
+compute_ses_descriptives(parental_indicators) %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+### Correlation Structure
+
+```{r}
+#| label: tbl-ses-correlations
+#| tbl-cap: "Correlation Matrix of Parental SES Indicators"
+#| code-fold: show
+#| column: body-outset-right
+
+cor_parental <- cor(parental_indicators, use = "pairwise.complete.obs")
+
+footnote_text <- glue(
+  "Pearson correlations with pairwise deletion; ",
+  "within-domain correlations appear in diagonal quadrants; ",
+  "cross-domain correlations indicate degree of construct overlap."
+)
+
+as.data.frame(round(cor_parental, 3)) %>%
+  tibble::rownames_to_column("Indicator") %>%
+  as_kable(align = "lrrrr") %>%
+  footnote() %>%
+  add_style()
+```
+
+```{r}
+#| label: tbl-correlation-diagnostics
+#| tbl-cap: "Correlation Pattern Diagnostics"
+#| code-fold: show
+#| column: body-outset-right
+
+# extract correlation patterns for domain diagnostics
+within_edu <- cor_parental["edu_father", "edu_mother"]
+within_occ <- cor_parental["occ_father", "occ_mother"]
+cross_domain <- mean(c(
+  cor_parental["edu_father", "occ_father"],
+  cor_parental["edu_father", "occ_mother"],
+  cor_parental["edu_mother", "occ_father"],
+  cor_parental["edu_mother", "occ_mother"]
+))
+
+# determine if cross-domain correlations are substantially lower
+cross_lower_than_within <- cross_domain < min(within_edu, within_occ) - 0.10
+
+cor_diagnostics <- tibble::tibble(
+  Pattern = c(
+    "Within-Education (Father \u2194 Mother)",
+    "Within-Occupation (Father \u2194 Mother)",
+    "Cross-Domain (Education \u2194 Occupation)"
+  ),
+  r = round(c(within_edu, within_occ, cross_domain), 3),
+  Interpretation = c(
+    "Parental homogamy in education",
+    "Parental homogamy in occupation",
+    dplyr::if_else(cross_lower_than_within,
+      "Lower than within-domain (supports distinction)",
+      "Comparable to within-domain (suggests overlap)"
+    )
+  )
+)
+
+# conditional footnote based on observed correlation pattern
+footnote_text <- dplyr::if_else(
+  cross_lower_than_within,
+  glue(
+    "Cross-domain correlations are substantially lower than within-domain ",
+    "correlations, suggesting education and occupation tap distinct constructs."
+  ),
+  glue(
+    "Cross-domain correlations are comparable to or exceed within-domain ",
+    "correlations, suggesting substantial construct overlap."
+  )
+)
+
+cor_diagnostics %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+### Reliability Analysis
+
+```{r}
+#| label: reliability-computation
+#| code-fold: show
+#| column: body-outset-right
+
+# complete cases for reliability analysis
+parental_complete <- parental_indicators %>%
+  tidyr::drop_na()
+
+# cronbach's alpha for parental SES composite (4 indicators)
+alpha_parental <- psych::alpha(
+  parental_complete,
+  check.keys = TRUE,
+  warnings = FALSE
+)
+
+# mcdonald's omega (hierarchical) with error handling
+omega_parental <- tryCatch(
+  {
+    psych::omega(parental_complete, nfactors = 1, fm = "ml", plot = FALSE)
+  },
+  error = function(e) NULL
+)
+
+# spearman-brown for 2-item education scale
+parental_edu_only <- parental_indicators %>%
+  dplyr::select(edu_father, edu_mother) %>%
+  tidyr::drop_na()
+
+r_edu <- cor(parental_edu_only$edu_father, parental_edu_only$edu_mother)
+sb_edu <- (2 * r_edu) / (1 + r_edu)
+
+# spearman-brown for 2-item occupation scale
+parental_occ_only <- parental_indicators %>%
+  dplyr::select(occ_father, occ_mother) %>%
+  tidyr::drop_na()
+
+r_occ <- cor(parental_occ_only$occ_father, parental_occ_only$occ_mother)
+sb_occ <- (2 * r_occ) / (1 + r_occ)
+
+# partner SES reliability (2 items)
+partner_complete <- partner_indicators %>%
+  tidyr::drop_na()
+
+r_partner <- cor(partner_complete$edu_partner, partner_complete$occ_partner)
+sb_partner <- (2 * r_partner) / (1 + r_partner)
+```
+
+```{r}
+#| label: tbl-reliability-composite
+#| tbl-cap: "Reliability of Parental SES Composite Scale (4 Indicators)"
+#| code-fold: true
+#| column: body-outset-right
+
+col_names <- c("Statistic", "Value", "Threshold", "Met")
+
+reliability_composite <- data.frame(
+  Statistic = c(
+    "Cronbach's $\\alpha$ (standardized)",
+    "Cronbach's $\\alpha$ (raw)",
+    "McDonald's $\\omega$ total",
+    "Average inter-item $r$",
+    "Complete cases"
+  ),
+  Value = c(
+    round(alpha_parental$total$std.alpha, 3),
+    round(alpha_parental$total$raw_alpha, 3),
+    if (!is.null(omega_parental)) round(omega_parental$omega.tot, 3) else NA,
+    round(alpha_parental$total$average_r, 3),
+    nrow(parental_complete)
+  ),
+  Threshold = c("$\\geq 0.70$", "$\\geq 0.70$", "$\\geq 0.70$", "$\\geq 0.30$", "\u2014"),
+  Met = c(
+    if (alpha_parental$total$std.alpha >= 0.70) "$\\checkmark$" else "$\\times$",
+    if (alpha_parental$total$raw_alpha >= 0.70) "$\\checkmark$" else "$\\times$",
+    if (!is.null(omega_parental) && omega_parental$omega.tot >= 0.70) "$\\checkmark$" else "$\\times$",
+    if (alpha_parental$total$average_r >= 0.30) "$\\checkmark$" else "$\\times$",
+    "\u2014"
+  )
+)
+
+reliability_composite$Statistic %<>% md_to_html()
+reliability_composite$Threshold %<>% md_to_html()
+reliability_composite$Met %<>% md_to_html()
+
+footnote_text <- glue(
+  "Reliability thresholds based on Nunnally and Bernstein (1994); ",
+  "$\\alpha \\geq 0.70$ indicates acceptable internal consistency."
+)
+
+reliability_composite %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+```{r}
+#| label: tbl-item-statistics
+#| tbl-cap: "Item-Total Statistics for Parental SES Composite"
+#| code-fold: show
+#| column: body-outset-right
+
+col_names <- c("Indicator", "$r_{\\text{drop}}$", "$\\alpha_{\\text{if dropped}}$")
+
+item_stats <- data.frame(
+  indicator = rownames(alpha_parental$item.stats),
+  r_drop = round(alpha_parental$item.stats$r.drop, 3),
+  alpha_drop = round(alpha_parental$alpha.drop$std.alpha, 3)
+)
+
+footnote_text <- glue(
+  "$r_{{drop}}$ = corrected item-total correlation; ",
+  "$\\alpha_{{if dropped}}$ = scale reliability if item removed; ",
+  "items with $r_{{drop}} < 0.30$ may not belong to the construct."
+)
+
+item_stats %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+```{r}
+#| label: tbl-reliability-summary
+#| tbl-cap: "Reliability Summary Across Scale Specifications"
+#| code-fold: show
+#| column: body-outset-right
+
+col_names <- c(
+  "Scale", "$k$", "$n$", "$\\alpha$ / SB",
+  "Avg. $r$", "Threshold Met"
+)
+
+reliability_summary <- data.frame(
+  Scale = c(
+    "Parental SES (composite)",
+    "Parental Education",
+    "Parental Occupation",
+    "Partner SES (composite)"
+  ),
+  k = c(4, 2, 2, 2),
+  n = c(
+    nrow(parental_complete),
+    nrow(parental_edu_only),
+    nrow(parental_occ_only),
+    nrow(partner_complete)
+  ),
+  alpha = round(c(
+    alpha_parental$total$std.alpha,
+    sb_edu,
+    sb_occ,
+    sb_partner
+  ), 3),
+  avg_r = round(c(
+    alpha_parental$total$average_r,
+    r_edu,
+    r_occ,
+    r_partner
+  ), 3),
+  met = c(
+    if (alpha_parental$total$std.alpha >= 0.70) "$\\checkmark$" else "$\\times$",
+    if (sb_edu >= 0.70) "$\\checkmark$" else "$\\times$",
+    if (sb_occ >= 0.70) "$\\checkmark$" else "$\\times$",
+    if (sb_partner >= 0.70) "$\\checkmark$" else "$\\times$"
+  )
+)
+
+reliability_summary$met %<>% md_to_html()
+
+footnote_text <- glue(
+  "$k$ = number of indicators; ",
+  "for 2-item scales, Spearman-Brown coefficient is reported instead of $\\alpha$; ",
+  "threshold: $\\alpha \\geq 0.70$ (Nunnally and Bernstein 1994)."
+)
+
+reliability_summary %>%
+  as_kable(escape = FALSE) %>%
+  footnote() %>%
+  add_style()
+```
+
+### Confirmatory Factor Analysis
+
+```{r}
+#| label: cfa-model-specifications
+#| code-fold: show
+#| column: body-outset-right
+
+# model 1: single-factor composite
+model_1_composite <- "
+  parental_ses =~ edu_father + edu_mother + occ_father + occ_mother
+"
+
+# model 2: two-factor domain-specific
+model_2_domains <- "
+  education_parental =~ edu_father + edu_mother
+  isei08_parental =~ occ_father + occ_mother
+  education_parental ~~ isei08_parental
+"
+```
+
+```{r}
+#| label: cfa-estimation
+#| code-fold: show
+#| column: body-outset-right
+
+# fit model 1: single factor
+fit_m1 <- lavaan::cfa(
+  model_1_composite,
+  data = parental_indicators,
+  estimator = "MLR",
+  missing = "fiml",
+  std.lv = TRUE
+)
+
+# fit model 2: two factors
+fit_m2 <- lavaan::cfa(
+  model_2_domains,
+  data = parental_indicators,
+  estimator = "MLR",
+  missing = "fiml",
+  std.lv = TRUE
+)
+```
+
+```{r}
+#| label: cfa-fit-extraction
+#| code-fold: show
+#| column: body-outset-right
+
+# function to extract fit indices into standardized format
+extract_fit <- function(fit, name) {
+  if (is.null(fit)) {
+    return(tibble::tibble(
+      Model = name, chi_sq = NA, df = NA, p = NA,
+      CFI = NA, TLI = NA, RMSEA = NA, SRMR = NA, AIC = NA
+    ))
+  }
+  fm <- lavaan::fitMeasures(
+    fit, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "srmr", "aic")
+  )
+  tibble::tibble(
+    Model = name,
+    chi_sq = round(fm["chisq"], 2),
+    df = fm["df"],
+    p = round(fm["pvalue"], 4),
+    CFI = round(fm["cfi"], 3),
+    TLI = round(fm["tli"], 3),
+    RMSEA = round(fm["rmsea"], 3),
+    SRMR = round(fm["srmr"], 3),
+    AIC = round(fm["aic"], 1)
+  )
+}
+
+# extract fit indices for model evaluation
+fit_m1_cfi <- lavaan::fitMeasures(fit_m1, "cfi")
+fit_m1_rmsea <- lavaan::fitMeasures(fit_m1, "rmsea")
+fit_m2_cfi <- lavaan::fitMeasures(fit_m2, "cfi")
+fit_m2_rmsea <- lavaan::fitMeasures(fit_m2, "rmsea")
+
+# define fit acceptability thresholds
+cfi_acceptable <- 0.90
+rmsea_acceptable <- 0.08
+
+# evaluate model fit against thresholds
+m1_fit_acceptable <- fit_m1_cfi >= cfi_acceptable & fit_m1_rmsea <= rmsea_acceptable
+m2_fit_acceptable <- fit_m2_cfi >= cfi_acceptable & fit_m2_rmsea <= rmsea_acceptable
+any_fit_acceptable <- m1_fit_acceptable | m2_fit_acceptable
+```
+
+```{r}
+#| label: tbl-cfa-fit-comparison
+#| tbl-cap: "CFA Model Fit Comparison"
+#| code-fold: show
+#| column: body-outset-right
+
+fit_comparison <- dplyr::bind_rows(
+  extract_fit(fit_m1, "1. Single-Factor (Composite)"),
+  extract_fit(fit_m2, "2. Two-Factor (Domains)")
+)
+
+col_names <- c(
+  "Model", "$\\chi^2$", "$df$", "$p$",
+  "CFI", "TLI", "RMSEA", "SRMR", "AIC"
+)
+
+footnote_text <- glue(
+  "Estimation: MLR (robust to non-normality); ",
+  "missing data: FIML; ",
+  "fit thresholds: CFI/TLI $\\geq$ 0.95 (good), $\\geq$ 0.90 (acceptable); ",
+  "RMSEA $\\leq$ 0.06 (good), $\\leq$ 0.08 (acceptable)."
+)
+
+fit_comparison %>%
+  as_kable(escape = FALSE) %>%
+  footnote() %>%
+  add_style()
+```
+
+```{r}
+#| label: model-fit-warning
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+# generate warning callout if model fit is unacceptable
+if (!any_fit_acceptable) {
+  warning_html <- glue(
+    "<div class='callout-warning'>
+    <strong>Model Fit Warning</strong><br><br>
+    Neither measurement model achieves acceptable fit (CFI $\\geq$ 0.90, ",
+    "RMSEA $\\leq$ 0.08). The single-factor model shows CFI = {round(fit_m1_cfi, 3)} ",
+    "and RMSEA = {round(fit_m1_rmsea, 3)}; the two-factor model shows ",
+    "CFI = {round(fit_m2_cfi, 3)} and RMSEA = {round(fit_m2_rmsea, 3)}. ",
+    "Observed variable composites may be more appropriate than latent factor scores.
+    </div>"
+  )
+  htmltools::HTML(warning_html)
+}
+```
+
+```{r}
+#| label: tbl-chi-diff-test
+#| tbl-cap: "Chi-Square Difference Test: Single vs. Two-Factor Model"
+#| code-fold: show
+#| column: body-outset-right
+
+# nested model comparison via chi-square difference test
+chi_diff <- lavaan::anova(fit_m1, fit_m2)
+
+chi_diff_tbl <- tibble::tibble(
+  Comparison = "Model 2 vs. Model 1",
+  Delta_chi_sq = round(chi_diff$`Chisq diff`[2], 2),
+  Delta_df = chi_diff$`Df diff`[2],
+  p = round(chi_diff$`Pr(>Chisq)`[2], 4)
+)
+
+footnote_text <- glue(
+  "A significant $\\chi^2$ difference ($p < .05$) indicates the two-factor ",
+  "model fits significantly better. With df = 1, interpret cautiously."
+)
+
+chi_diff_tbl %>%
+  as_kable(escape = FALSE) %>%
+  footnote() %>%
+  add_style()
+```
+
+```{r}
+#| label: tbl-cfa-loadings
+#| tbl-cap: "Standardized Factor Loadings"
+#| code-fold: show
+#| column: body-outset-right
+
+# extract and combine loadings from both models
+loadings_m1 <- lavaan::standardizedSolution(fit_m1) %>%
+  dplyr::filter(op == "=~") %>%
+  dplyr::transmute(
+    Model = "Single-Factor",
+    Factor = lhs,
+    Indicator = rhs,
+    Loading = round(est.std, 3),
+    SE = round(se, 3),
+    p = pvalue
+  )
+
+loadings_m2 <- lavaan::standardizedSolution(fit_m2) %>%
+  dplyr::filter(op == "=~") %>%
+  dplyr::transmute(
+    Model = "Two-Factor",
+    Factor = lhs,
+    Indicator = rhs,
+    Loading = round(est.std, 3),
+    SE = round(se, 3),
+    p = pvalue
+  )
+
+loadings_combined <- dplyr::bind_rows(loadings_m1, loadings_m2) %>%
+  dplyr::mutate(
+    Sig = dplyr::case_when(
+      p < 0.001 ~ "***",
+      p < 0.01 ~ "**",
+      p < 0.05 ~ "*",
+      TRUE ~ ""
+    )
+  ) %>%
+  dplyr::select(-p)
+
+col_names <- c("Model", "Factor", "Indicator", "$\\lambda$", "$SE$", "Sig.")
+
+footnote_text <- "*** $p < .001$; ** $p < .01$; * $p < .05$."
+
+loadings_combined %>%
+  as_kable(escape = FALSE) %>%
+  footnote() %>%
+  add_style()
+```
+
+### Convergent and Discriminant Validity
+
+```{r}
+#| label: validity-computation
+#| code-fold: show
+#| column: body-outset-right
+
+# function to compute average variance extracted (AVE)
+compute_ave <- function(fit, factor_name) {
+  loadings <- lavaan::standardizedSolution(fit) %>%
+    dplyr::filter(op == "=~", lhs == factor_name) %>%
+    dplyr::pull(est.std)
+  mean(loadings^2)
+}
+
+# function to compute composite reliability (CR)
+compute_cr <- function(fit, factor_name) {
+  loadings <- lavaan::standardizedSolution(fit) %>%
+    dplyr::filter(op == "=~", lhs == factor_name) %>%
+    dplyr::pull(est.std)
+  sum_l <- sum(loadings)
+  sum_e <- sum(1 - loadings^2)
+  (sum_l^2) / (sum_l^2 + sum_e)
+}
+
+# single-factor model metrics
+ave_composite <- compute_ave(fit_m1, "parental_ses")
+cr_composite <- compute_cr(fit_m1, "parental_ses")
+
+# two-factor model metrics
+ave_edu <- compute_ave(fit_m2, "education_parental")
+ave_occ <- compute_ave(fit_m2, "isei08_parental")
+cr_edu <- compute_cr(fit_m2, "education_parental")
+cr_occ <- compute_cr(fit_m2, "isei08_parental")
+
+# factor correlation from two-factor model
+factor_cor <- lavaan::standardizedSolution(fit_m2) %>%
+  dplyr::filter(op == "~~", lhs == "education_parental", rhs == "isei08_parental") %>%
+  dplyr::pull(est.std)
+
+# fornell-larcker criterion: squared correlation < AVE for each factor
+fl_edu <- factor_cor^2 < ave_edu
+fl_occ <- factor_cor^2 < ave_occ
+
+# htmt ratio using observed correlations
+htmt_num <- mean(c(
+  cor_parental["edu_father", "occ_father"],
+  cor_parental["edu_father", "occ_mother"],
+  cor_parental["edu_mother", "occ_father"],
+  cor_parental["edu_mother", "occ_mother"]
+))
+htmt_denom <- sqrt(
+  cor_parental["edu_father", "edu_mother"] *
+    cor_parental["occ_father", "occ_mother"]
+)
+htmt <- htmt_num / htmt_denom
+
+# flag extreme factor correlation (potential model identification issue)
+factor_cor_extreme <- abs(factor_cor) > 0.95
+```
+
+```{r}
+#| label: factor-correlation-warning
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+# generate warning callout if factor correlation is extreme
+if (factor_cor_extreme) {
+  fc_warning <- glue(
+    "<div class='callout-warning'>
+    <strong>Factor Correlation Warning</strong><br><br>
+    The factor correlation between parental education and parental occupation ",
+    "is extremely high ($\\phi$ = {round(factor_cor, 3)}), approaching unity. ",
+    "With only two indicators per factor, discriminant validity tests are unreliable.
+    </div>"
+  )
+  htmltools::HTML(fc_warning)
+}
+```
+
+```{r}
+#| label: tbl-validity-metrics
+#| tbl-cap: "Convergent Validity: AVE and Composite Reliability"
+#| code-fold: show
+#| column: body-outset-right
+
+col_names <- c("Model", "Factor", "AVE", "CR", "AVE Met", "CR Met")
+
+validity_metrics <- data.frame(
+  Model = c("Single-Factor", "Two-Factor", "Two-Factor"),
+  Factor = c("Parental SES", "Parental Education", "Parental Occupation"),
+  AVE = round(c(ave_composite, ave_edu, ave_occ), 3),
+  CR = round(c(cr_composite, cr_edu, cr_occ), 3),
+  AVE_met = c(
+    if (ave_composite >= 0.50) "$\\checkmark$" else "$\\times$",
+    if (ave_edu >= 0.50) "$\\checkmark$" else "$\\times$",
+    if (ave_occ >= 0.50) "$\\checkmark$" else "$\\times$"
+  ),
+  CR_met = c(
+    if (cr_composite >= 0.70) "$\\checkmark$" else "$\\times$",
+    if (cr_edu >= 0.70) "$\\checkmark$" else "$\\times$",
+    if (cr_occ >= 0.70) "$\\checkmark$" else "$\\times$"
+  )
+)
+
+validity_metrics$AVE_met %<>% md_to_html()
+validity_metrics$CR_met %<>% md_to_html()
+
+footnote_text <- glue(
+  "AVE = Average Variance Extracted (threshold $\\geq 0.50$); ",
+  "CR = Composite Reliability (threshold $\\geq 0.70$) (Fornell and Larcker 1981)."
+)
+
+validity_metrics %>%
+  as_kable(escape = FALSE) %>%
+  footnote() %>%
+  add_style()
+```
+
+```{r}
+#| label: discriminant-validity-attrs
+#| code-fold: true
+#| column: body-outset-right
+
+col_names <- c("Criterion", "Value", "Threshold", "Conclusion")
+
+footnote_text <- glue(
+  "Fornell-Larcker: discriminant validity established when $\\phi^2 < AVE$ (Fornell and Larcker 1981); ",
+  "HTMT $< 0.85$ indicates discriminant validity (Henseler, Ringle, and Sarstedt 2015); ",
+  "'Unreliable' indicates model identification issues."
+)
+```
+
+```{r}
+#| label: tbl-discriminant-validity
+#| tbl-cap: "Discriminant Validity Assessment"
+#| code-fold: show
+#| column: body-outset-right
+
+# determine conclusions with appropriate caveats for unreliable estimates
+fl_edu_conclusion <- dplyr::case_when(
+  factor_cor_extreme ~ "Unreliable",
+  fl_edu ~ "Distinct",
+  TRUE ~ "Overlap"
+)
+fl_occ_conclusion <- dplyr::case_when(
+  factor_cor_extreme ~ "Unreliable",
+  fl_occ ~ "Distinct",
+  TRUE ~ "Overlap"
+)
+htmt_conclusion <- if (htmt < 0.85) "Distinct" else "Overlap"
+
+discriminant_tbl <- data.frame(
+  Criterion = c(
+    "Factor correlation ($\\phi$)",
+    "Squared correlation ($\\phi^2$)",
+    "AVE (Education)",
+    "AVE (Occupation)",
+    "Fornell-Larcker: $\\phi^2 < AVE_{Edu}$",
+    "Fornell-Larcker: $\\phi^2 < AVE_{Occ}$",
+    "HTMT ratio"
+  ),
+  Value = c(
+    round(factor_cor, 3),
+    round(factor_cor^2, 3),
+    round(ave_edu, 3),
+    round(ave_occ, 3),
+    if (fl_edu) "$\\checkmark$" else "$\\times$",
+    if (fl_occ) "$\\checkmark$" else "$\\times$",
+    round(htmt, 3)
+  ),
+  Threshold = c(
+    "\u2014", "\u2014", "$\\geq 0.50$", "$\\geq 0.50$",
+    "$\\phi^2 < AVE$", "$\\phi^2 < AVE$", "$< 0.85$"
+  ),
+  Conclusion = c(
+    if (factor_cor_extreme) "Extreme (see warning)" else "\u2014",
+    "\u2014", "\u2014", "\u2014",
+    fl_edu_conclusion,
+    fl_occ_conclusion,
+    htmt_conclusion
+  )
+)
+
+discriminant_tbl$Criterion %<>% md_to_html()
+discriminant_tbl$Value %<>% md_to_html()
+discriminant_tbl$Threshold %<>% md_to_html()
+
+discriminant_tbl %>%
+  as_kable(escape = FALSE) %>%
+  footnote() %>%
+  add_style()
+```
+
+### Synthesis and Recommendation
+
+```{r}
+#| label: validity-synthesis-attrs
+#| code-fold: true
+#| column: body-outset-right
+
+col_names <- c("Criterion", "Composite SES", "Domain-Specific", "Threshold")
+
+footnote_text <- glue(
+  "FL = Fornell-Larcker criterion; ",
+  "HTMT = Heterotrait-Monotrait ratio; ",
+  "domain-specific values reported as Education / Occupation."
+)
+```
+
+
+```{r}
+#| label: tbl-validity-synthesis
+#| tbl-cap: "Summary of Validity and Reliability Evidence"
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+synthesis_tbl <- data.frame(
+  Criterion = c(
+    "Internal Consistency ($\\alpha$)",
+    "Average Variance Extracted",
+    "Composite Reliability",
+    "Discriminant Validity (FL)",
+    "Discriminant Validity (HTMT)",
+    "CFA Model Fit (CFI)",
+    "CFA Model Fit (RMSEA)"
+  ),
+  Composite = c(
+    round(alpha_parental$total$std.alpha, 3),
+    round(ave_composite, 3),
+    round(cr_composite, 3),
+    "N/A",
+    "N/A",
+    round(fit_m1_cfi, 3),
+    round(fit_m1_rmsea, 3)
+  ),
+  Domain = c(
+    paste0(round(sb_edu, 3), " / ", round(sb_occ, 3)),
+    paste0(round(ave_edu, 3), " / ", round(ave_occ, 3)),
+    paste0(round(cr_edu, 3), " / ", round(cr_occ, 3)),
+    if (fl_edu && fl_occ && !factor_cor_extreme) "Supported" else "Not Supported",
+    if (htmt < 0.85) "Supported" else "Not Supported",
+    round(fit_m2_cfi, 3),
+    round(fit_m2_rmsea, 3)
+  ),
+  Threshold = c(
+    "$\\geq 0.70$",
+    "$\\geq 0.50$",
+    "$\\geq 0.70$",
+    "$\\phi^2 < AVE$",
+    "$< 0.85$",
+    "$\\geq 0.90$",
+    "$\\leq 0.08$"
+  )
+)
+
+synthesis_tbl$Criterion %<>% md_to_html()
+synthesis_tbl$Threshold %<>% md_to_html()
+
+synthesis_tbl %>%
+  as_kable(escape = FALSE) %>%
+  footnote() %>%
+  add_style()
+```
+
+```{r}
+#| label: ses-recommendation
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+# comprehensive decision logic incorporating model fit and validity evidence
+alpha_ok <- alpha_parental$total$std.alpha >= 0.70
+ave_ok <- ave_composite >= 0.50
+any_fit_acceptable <- m1_fit_acceptable || m2_fit_acceptable
+discriminant_not_established <- !(fl_edu && fl_occ) | factor_cor_extreme
+
+# determine recommendation based on full evidence pattern
+if (!any_fit_acceptable) {
+  decision <- glue(
+    "<div class='callout-important'>
+    <strong>Recommendation:</strong> Latent variable modeling is not supported.<br><br>
+    Neither measurement model achieves acceptable fit ",
+    "(single-factor: CFI = {round(fit_m1_cfi, 3)}, RMSEA = {round(fit_m1_rmsea, 3)}; ",
+    "two-factor: CFI = {round(fit_m2_cfi, 3)}, RMSEA = {round(fit_m2_rmsea, 3)}). ",
+    "Use observed variable composites:<br>
+    <ul>
+    <li><code>education_parental</code> = mean of father's and mother's education</li>
+    <li><code>isei08_parental</code> = mean of father's and mother's ISEI-08</li>
+    </ul>
+    </div>"
+  )
+} else {
+  decision <- if (alpha_ok && ave_ok && discriminant_not_established) {
+    "Composite SES operationalization is acceptable."
+  } else if (fl_edu && fl_occ && !factor_cor_extreme && htmt < 0.85) {
+    "Domain-specific operationalization preferred."
+  } else {
+    "Evidence is mixed."
+  }
+
+  decision <- glue(
+    "<div class='callout-note'>
+    <strong>Recommendation:</strong> {decision}
+    </div>"
+  )
+}
+
+htmltools::HTML(decision)
+```
+
+### Compute Composite SES Indicators
+
+The composites computed here are provisional; step 6 recomputes them after imputation.
+
+```{r}
+#| label: compute-ses-composites-attrs
+#| tbl-cap: "Summary of SES Indicators"
+#| code-fold: true
+#| column: body-outset-right
+
+col_names <- c(
+  "Indicator", "$n$", "$\\bar{x}$", "$SD$", "Min", "Max", "Definition"
+)
+
+footnote_text <- glue(
+  "$N = {nrow(data_for_imputation)}$; ",
+  "parental composites computed using complete-case row means (na.rm = FALSE); ",
+  "partner indicators (`education_partner`, `isei08_partner`) set to NA for respondents without partners."
+)
+```
+
+```{r}
+#| label: compute-ses-composites
+#| tbl-cap: "Summary of SES Indicators"
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+# compute domain-specific parental SES composites
+# naming follows dimension_referent pattern (e.g., education_parental, isei08_parental)
+data_for_imputation <- data_for_imputation %>%
+  dplyr::mutate(
+    education_parental = rowMeans(
+      dplyr::pick(education_father, education_mother),
+      na.rm = FALSE
+    ),
+    isei08_parental = rowMeans(
+      dplyr::pick(isei08_father, isei08_mother),
+      na.rm = FALSE
+    )
+  )
+
+# helper function to update variable labels
+update_variable_label <- function(data, column_name, label) {
+  labelled::var_label(data[[column_name]]) <- label
+  data
+}
+
+# apply variable labels for documentation
+data_for_imputation <- data_for_imputation %>%
+  update_variable_label("education_parental", "Parental Education (mean of father and mother)") %>%
+  update_variable_label("isei08_parental", "Parental Occupation (mean ISEI-08 of father and mother)")
+
+# generate summary statistics for parental composites and partner indicators
+ses_composite_summary <- data_for_imputation %>%
+  dplyr::select(education_parental, isei08_parental, education_partner, isei08_partner) %>%
+  tidyr::pivot_longer(
+    cols = dplyr::everything(),
+    names_to = "indicator",
+    values_to = "value"
+  ) %>%
+  dplyr::group_by(indicator) %>%
+  dplyr::summarise(
+    n = sum(!is.na(value)),
+    mean = round(mean(value, na.rm = TRUE), 2),
+    sd = round(sd(value, na.rm = TRUE), 2),
+    min = round(min(value, na.rm = TRUE), 2),
+    max = round(max(value, na.rm = TRUE), 2),
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(
+    definition = dplyr::case_when(
+      indicator == "education_parental" ~ "Mean of father's and mother's education (0-6)",
+      indicator == "isei08_parental" ~ "Mean of father's and mother's ISEI-08",
+      indicator == "education_partner" ~ "Partner's educational attainment (0-6)",
+      indicator == "isei08_partner" ~ "Partner's ISEI-08 occupational status",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  dplyr::arrange(dplyr::desc(grepl("parental", indicator)), indicator)
+
+ses_composite_summary %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+```{r}
+#| label: save-cleaned-data
+#| code-fold: true
+#| column: body-outset-right
+
+# save final cleaned dataset with SES composites for step 4
+haven::write_sav(
+  data_for_imputation,
+  here::here("assets", "data", "saved", "data_for_imputation.sav")
+)
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+## Output
+
+| File                                        | Content                                                |
+| ------------------------------------------- | ------------------------------------------------------ |
+| `assets/data/saved/data_for_imputation.sav` | Recoded data with SES composites, ready for imputation |
+
+**Next:** [Step 4 (Outliers Detection)](/analysis/data/outliers/index.qmd)

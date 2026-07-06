@@ -1,0 +1,55 @@
+/.quarto/
+**/*.quarto_ipynb
+
+# === managed block ===
+.DS_Store
+**/.DS_Store
+**/_old/
+**/index [0-9]*.qmd
+/_site/
+/_freeze/
+.quarto/
+_papers/
+files/
+**/index_files/
+**/index.html
+/index.html
+/search.json
+/site_libs/
+*_cache/
+**/*_cache/
+**/*-figs-*.png
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+renv/library/
+renv/staging/
+renv/python/
+renv/sandbox/
+*.sav
+*.csv
+*.rds
+*.rda
+*.RData
+*.rdx
+*.rdb
+*.dta
+*.parquet
+*.feather
+*.xpt
+*.por
+*.sas7bdat
+*.docx
+*.doc
+*.zip
+# === managed block ===
+publish_github.sh
+publish_github.sh
+
+# finder alias files stay local, never on github
+**/index.html alias
+
+# step 2 reference inputs; public classification data
+!assets/data/egp_lookup.csv
+!assets/data/brc2014_isco08_brc_crosswalk.csv

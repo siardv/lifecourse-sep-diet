@@ -1,0 +1,796 @@
+---
+title: "Missing Data Imputation"
+subtitle: "Random Forest Approach via `missForest`"
+author: "Siard van den Bosch"
+date: 2024-11-20
+date-modified: last-modified
+---
+
+```{=html}
+<script>
+  window.config = {offset: 5};
+</script>
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+|                |         |
+| -------------- | ------- |
+| **Purpose**    | Impute missing values via random-forest imputation on partnered cases |
+| **Inputs**     | `data_without_outliers.sav` |
+| **Outputs**    | `imputed_data_combined.sav`, `imputed_results_missforest.rds` |
+| **Method**     | `missForest` random-forest imputation; variablewise OOB error  |
+| **Requires**   | [Step 4 (Outliers Detection)](/analysis/data/outliers/index.qmd) |
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+::: {.callout-note icon=false}
+## Rationale
+
+- `missForest`: handles mixed numeric and factor variables without distributional assumptions [@stekhovenbuhlmann2012]
+- Partition by partnership: partner variables have structural NA for non-partnered cases and must not be imputed [@littlerubin2019]
+- `variablewise = TRUE`: yields per-variable OOB error for targeted diagnostics; imputed values are unaffected
+- Serial execution (`parallelize = "no"`): preserves variablewise OOB reporting; `parallelize = "variables"` returns zero-valued OOB in current `missForest`
+- OOB error: bootstrap aggregation in random forests provides internal validation [@breiman2001]
+- NRMSE and PFC: standard fidelity metrics for mixed-type random-forest imputation [@tangishwaran2017]
+:::
+
+::: {style="margin-block-end: 1rem;"}
+:::
+
+```{r}
+#| label: load-project-resources
+#| message: false
+#| warning: false
+#| code-fold: show
+#| column: body-outset-right
+
+# clear global env and force full garbage collection
+rm(list = ls(envir = .GlobalEnv), envir = .GlobalEnv)
+invisible(gc(full = TRUE))
+
+# detach non-base packages to avoid namespace interference
+invisible(lapply(grep(":|autoloads|globalenv", search(),
+  invert = TRUE, value = TRUE, ignore.case = TRUE
+), detach, character.only = TRUE, unload = TRUE, force = TRUE))
+
+# source custom functions for data handling and analysis
+purrr::walk(file.path(here::here("assets", "functions"), paste0(c(
+  "set_globals", "summarize_na", "as_kable", "describe", "copy_labels",
+  "add_style", "md_to_html", "import_pipes", "footnote", "format_p_value",
+  "beautify_names", "row_grouping", "numeric_df"
+), ".R")), source)
+
+# set global options and import pipe operators
+set_globals()
+import_pipes()
+
+# load dataset excluding outliers from step 4
+data_without_outliers <- haven::read_sav(
+  here::here("assets", "data", "saved", "data_without_outliers.sav")
+)
+```
+
+## Verify Dataset from Step 4
+
+```{r}
+#| label: verify-step4-data
+#| results: asis
+#| code-fold: show
+#| column: body-outset-right
+
+# verify expected row count and key variables from step 4
+n_obs <- nrow(data_without_outliers)
+required_vars <- c("idnummer", "partner", "education", "isei08", "dhd_index")
+vars_present <- required_vars[required_vars %in% names(data_without_outliers)]
+vars_missing <- setdiff(required_vars, vars_present)
+
+if (length(vars_missing) > 0) {
+  stop(
+    "Missing required variables from Step 4: ",
+    paste(vars_missing, collapse = ", ")
+  )
+}
+
+# count partnered vs non-partnered for context
+n_partnered <- sum(data_without_outliers$partner == 1, na.rm = TRUE)
+n_non_partnered <- sum(data_without_outliers$partner == 0, na.rm = TRUE)
+
+htmltools::HTML(glue(
+  "<div class='callout-note'>
+  <strong>Step 4 Data Verification</strong><br><br>
+  <strong>Observations:</strong> {n_obs}<br>
+  <strong>Partnered respondents:</strong> {n_partnered} (receive imputation)<br>
+  <strong>Non-partnered respondents:</strong> {n_non_partnered} ",
+  "(held out, no partner data to impute)<br>
+  <strong>Required variables present:</strong> ",
+  "<code>{paste(vars_present, collapse = '</code>, <code>')}</code>
+  </div>"
+))
+```
+
+## Configure Dataset for Imputation
+
+- *in*: `data_without_outliers`
+- *out*: `df_impute` (partnered subsample, prepared), `df_non_partnered` (held out), `passthrough_frame` (intact passthrough values)
+- *rule*: filter `partner == 1` for imputation; convert columns with `<= 5` unique values to factors
+
+```{r}
+#| label: imputation-setup
+#| code-fold: show
+#| column: body-outset-right
+
+# rename variables for clarity and consistency with pipeline conventions
+df_with_missings <- data_without_outliers %>%
+  dplyr::rename(
+    education_self = education,
+    isei08_self = isei08
+  )
+
+# nominal classification codes, egp class codes, character labour-force
+# status, and derived composites are excluded from imputation: codes and
+# classes are not interval-scaled, lf_status is character, and composites
+# are recomputed from imputed components in step 6
+passthrough_vars <- grep(
+  "^isco08r|^brc14|^egp11|^lf_status|_parental$",
+  names(df_with_missings),
+  value = TRUE
+)
+
+# capture the intact passthrough values before any numeric coercion:
+# numeric_df converts character columns with as.numeric, which would turn
+# the lf_status columns into all-NA
+passthrough_frame <- df_with_missings %>%
+  dplyr::select(idnummer, dplyr::all_of(passthrough_vars))
+
+# extract non-partnered data (no partner variables to impute); passthrough
+# columns are dropped so both branches align at the final bind
+df_non_partnered <- df_with_missings %>%
+  numeric_df() %>%
+  dplyr::filter(partner == 0) %>%
+  dplyr::select(-dplyr::all_of(passthrough_vars))
+
+# extract partnered data for imputation
+df_partnered <- df_with_missings %>%
+  numeric_df() %>%
+  dplyr::filter(partner == 1)
+
+# prepare data for missForest: remove identifiers, convert low-cardinality to factors
+df_impute <- df_partnered %>%
+  dplyr::select(
+    -idnummer, -partner,
+    -dplyr::all_of(passthrough_vars)
+  ) %>%
+  haven::zap_labels() %>%
+  droplevels() %>%
+  as.data.frame() %>%
+  dplyr::mutate(
+    dplyr::across(
+      dplyr::where(~ dplyr::n_distinct(.x, na.rm = TRUE) <= 5L),
+      as.factor
+    )
+  )
+
+# validate column types for missForest compatibility
+bad_cols <- names(df_impute)[!(vapply(df_impute, is.numeric, logical(1)) |
+  vapply(df_impute, is.factor, logical(1)))]
+if (length(bad_cols)) {
+  stop(
+    "missForest requires numeric or factor columns: ",
+    paste(bad_cols, collapse = ", ")
+  )
+}
+
+# check for completely missing variables (missForest cannot impute these)
+all_na <- names(df_impute)[colSums(!is.na(df_impute)) == 0]
+if (length(all_na)) {
+  stop("Variables with all values missing: ", paste(all_na, collapse = ", "))
+}
+```
+
+## Define Imputation Parameters
+
+```{r}
+#| label: imputation-parameters
+#| code-fold: show
+#| column: body-outset-right
+
+# imputation hyperparameters
+imputation_params <- list(
+  seed = 625L,
+  ntree = 200L,
+  mtry = floor(sqrt(ncol(df_impute))),
+  maxiter = 10L,
+  variablewise = TRUE,
+  replace = TRUE
+)
+```
+
+## Run missForest Imputation
+
+```{r}
+#| label: imputation-missforest
+#| code-fold: show
+#| column: body-outset-right
+
+# set seed for reproducibility
+set.seed(imputation_params$seed)
+
+# choose a safe number of workers (reserve one core for system)
+n_workers <- max(1L, parallel::detectCores(logical = FALSE) - 1L)
+
+# determine parallelization strategy based on problem size
+missing_rate <- vapply(df_impute, function(col) mean(is.na(col)), numeric(1))
+n_miss_vars <- sum(missing_rate > 0)
+
+# IMPORTANT: parallelize = "variables" together with variablewise = TRUE
+# returns a length-correct but all-zero OOBerror vector in current missForest
+# (the imputation itself completes correctly but OOB diagnostics are useless).
+# Serial execution preserves per-variable OOB reporting. Runtime impact is
+# modest for this dataset (911 rows, ~31 variables, 200 trees): tens of
+# seconds to about a minute on a modern laptop.
+parallelize <- "no"
+
+# detect missForest capabilities (legacy randomForest vs ranger backend)
+mf_formals <- names(formals(missForest::missForest))
+has_backend <- "backend" %in% mf_formals
+has_num_threads <- "num.threads" %in% mf_formals
+
+# do not pass a backend argument; let missForest use its default.
+# Earlier attempts to explicitly set backend = "ranger" or to suppress it in
+# combination with parallelize = "variables" did not restore OOB reporting;
+# the serial parallelize = "no" path above is what fixes it.
+backend <- NULL
+
+# set up foreach backend only when missForest needs it
+use_foreach <- parallelize == "variables" ||
+  (parallelize == "forests" && !has_num_threads)
+
+if (use_foreach) {
+  clust <- parallel::makeCluster(n_workers)
+  on.exit(parallel::stopCluster(clust), add = TRUE)
+  doParallel::registerDoParallel(clust)
+  doRNG::registerDoRNG(seed = imputation_params$seed)
+}
+
+# assemble missForest arguments
+mf_args <- list(
+  xmis = df_impute,
+  ntree = imputation_params$ntree,
+  mtry = imputation_params$mtry,
+  maxiter = imputation_params$maxiter,
+  variablewise = imputation_params$variablewise,
+  verbose = TRUE,
+  parallelize = parallelize,
+  replace = imputation_params$replace
+)
+
+if (has_num_threads && parallelize == "forests") mf_args$num.threads <- n_workers
+
+# execute imputation
+imp_mf <- do.call(missForest::missForest, mf_args)
+
+# store results with metadata for documentation
+imputed_results <- list(
+  imp = imp_mf,
+  seed = imputation_params$seed,
+  n_workers = n_workers,
+  parallelize = parallelize,
+  backend = backend,
+  ntree = imputation_params$ntree,
+  mtry = imputation_params$mtry,
+  maxiter = imputation_params$maxiter
+)
+
+saveRDS(
+  imputed_results,
+  here::here("assets", "data", "saved", "imputed_results_missforest.rds")
+)
+```
+
+## Calculate Imputation Performance Metrics
+
+```{r}
+#| label: define-metrics-table
+#| code-fold: true
+#| column: body-outset-right
+
+# table metadata for OOB metrics display
+footnote_text <- glue(
+  "OOB = out-of-bag. Numeric variables report OOB MSE when variablewise = TRUE; ",
+  "factor variables report OOB PFC (proportion falsely classified). ",
+  "For numeric variables, MSE is rescaled to approximate NRMSE: ",
+  "sqrt(MSE) / SD(observed). ",
+  "Lower values indicate better OOB performance. ",
+  "Settings: ntree = {imputed_results$ntree}, mtry = {imputed_results$mtry}, ",
+  "maxiter = {imputed_results$maxiter}, parallelize = {imputed_results$parallelize}."
+)
+
+col_names <- c(
+  "Variable", "Error Metric", "OOB Imputation Error", "Missing Rate",
+  "Rating"
+)
+```
+
+```{r}
+#| label: imputation-metrics
+#| code-fold: show
+#| column: body-outset-right
+
+# extract imputation results for analysis
+imp_mf <- imputed_results$imp
+
+# calculate missing rates for all variables
+missing_info <- data.frame(
+  var = names(df_impute),
+  missing_rate = vapply(df_impute, function(col) mean(is.na(col)), numeric(1)),
+  stringsAsFactors = FALSE
+)
+
+# compute standard deviations for numeric variables (observed values only)
+num_vars <- names(df_impute)[vapply(df_impute, is.numeric, logical(1))]
+lookup_sd <- data.frame(
+  var = num_vars,
+  sd_obs = vapply(df_impute[num_vars], stats::sd, numeric(1), na.rm = TRUE),
+  stringsAsFactors = FALSE
+)
+
+# assign variable names to OOB errors
+raw_oob <- imp_mf$OOBerror
+names(raw_oob) <- colnames(df_impute)
+
+# create base dataframe for variable-wise metrics
+mf_metrics <- data.frame(
+  var = colnames(df_impute),
+  erm = ifelse(vapply(df_impute, is.numeric, logical(1)), "NRMSE (approx)", "PFC"),
+  oob = as.numeric(raw_oob),
+  stringsAsFactors = FALSE
+) %>%
+  dplyr::left_join(lookup_sd, by = "var") %>%
+  dplyr::left_join(missing_info, by = "var") %>%
+  dplyr::mutate(
+    # for numeric variables, convert OOB MSE to approximate NRMSE
+    oob = dplyr::case_when(
+      erm == "NRMSE (approx)" & is.finite(sd_obs) & sd_obs > 0 ~ sqrt(oob) / sd_obs,
+      erm == "NRMSE (approx)" ~ NA_real_,
+      TRUE ~ oob
+    ),
+    # add a compact rating to prioritize review
+    rating = dplyr::case_when(
+      missing_rate == 0 ~ "Complete",
+      oob < 0.5 ~ "Excellent",
+      oob < 0.7 ~ "Good",
+      oob < 0.9 ~ "Acceptable",
+      TRUE ~ "Review"
+    )
+  ) %>%
+  dplyr::select(var, erm, oob, missing_rate, rating)
+
+# compute a global, missingness-weighted summary from variable-wise metrics
+global_df <- mf_metrics %>%
+  dplyr::filter(missing_rate > 0) %>%
+  dplyr::group_by(erm) %>%
+  dplyr::summarise(
+    oob = stats::weighted.mean(oob, w = missing_rate, na.rm = TRUE),
+    missing_rate = mean(missing_rate),
+    rating = "Global (weighted)",
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(var = "Global") %>%
+  dplyr::select(var, erm, oob, missing_rate, rating)
+
+# prepare table for display (exclude complete variables)
+mf_metrics_tbl <- dplyr::bind_rows(mf_metrics, global_df) %>%
+  dplyr::filter(missing_rate > 0 | var == "Global") %>%
+  dplyr::mutate(var = beautify_names(var)) %>%
+  dplyr::arrange(dplyr::desc(var == "Global"), erm, var)
+
+# display the metrics table
+mf_metrics_tbl %>%
+  as_kable(cols = col_names, digits = 3) %>%
+  footnote() %>%
+  add_style()
+```
+
+## Visualize Imputation Diagnostics
+
+```{r}
+#| label: imputation-diagnostic-plot-function
+#| code-fold: show
+#| column: body-outset-right
+
+# function to create density comparison plots for imputation diagnostics
+plot_imputation_diagnostic <- function(orig_data, imputed_data, variable) {
+  x_orig <- orig_data[[variable]]
+  x_imp <- imputed_data[[variable]]
+
+  miss_idx <- is.na(x_orig)
+  n_miss <- sum(miss_idx)
+  n_tot <- length(x_orig)
+
+  # nothing to diagnose if no missingness
+  if (n_miss == 0) {
+    return(invisible(NULL))
+  }
+
+  # caption text showing missing rate
+  caption_txt <- sprintf("Missing: %d (%.1f%%)", n_miss, 100 * n_miss / n_tot)
+
+  # factor/character path: bar chart of proportions
+  if (is.factor(x_orig) || is.character(x_orig)) {
+    x_orig_f <- as.factor(x_orig)
+    x_imp_f <- as.factor(x_imp)
+
+    # observed distribution (excluding NAs)
+    obs_tab <- prop.table(table(x_orig_f[!is.na(x_orig_f)]))
+
+    # imputed-at-missing distribution
+    imp_tab <- prop.table(table(x_imp_f[miss_idx]))
+
+    levs <- union(names(obs_tab), names(imp_tab))
+    df_plot <- data.frame(
+      level = levs,
+      observed = as.numeric(obs_tab[levs]),
+      imputed_missing = as.numeric(imp_tab[levs])
+    )
+    df_plot[is.na(df_plot)] <- 0
+
+    df_long <- df_plot %>%
+      tidyr::pivot_longer(
+        cols = c("observed", "imputed_missing"),
+        names_to = "source",
+        values_to = "prop"
+      ) %>%
+      dplyr::mutate(
+        source = factor(
+          source,
+          levels = c("observed", "imputed_missing"),
+          labels = c("Observed (non-missing)", "Imputed (missing only)")
+        )
+      )
+
+    print(
+      ggplot2::ggplot(df_long, ggplot2::aes(x = level, y = prop, fill = source)) +
+        ggplot2::geom_col(position = "dodge") +
+        ggplot2::labs(
+          title = gsub("<.*?>", "", beautify_names(variable)),
+          x = gsub("<.*?>", "", beautify_names(variable)),
+          y = "Proportion",
+          fill = NULL,
+          caption = caption_txt
+        ) +
+        ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+    )
+
+    return(invisible(NULL))
+  }
+
+  # numeric path: density comparison
+  x_orig_num <- as.numeric(x_orig)
+  x_obs <- x_orig_num[!miss_idx]
+  x_imp_miss <- as.numeric(x_imp)[miss_idx]
+
+  # keep only finite values
+  x_obs <- x_obs[is.finite(x_obs)]
+  x_imp_miss <- x_imp_miss[is.finite(x_imp_miss)]
+
+  # if too few points for density, fall back to point plot
+  if (length(x_imp_miss) < 2L || length(x_obs) < 2L) {
+    df_fallback <- data.frame(
+      value = c(x_obs, x_imp_miss),
+      source = c(
+        rep("Observed (non-missing)", length(x_obs)),
+        rep("Imputed (missing only)", length(x_imp_miss))
+      )
+    )
+
+    print(
+      ggplot2::ggplot(df_fallback, ggplot2::aes(x = value, y = source)) +
+        ggplot2::geom_point(alpha = 0.6) +
+        ggplot2::labs(
+          title = gsub("<.*?>", "", beautify_names(variable)),
+          x = gsub("<.*?>", "", beautify_names(variable)),
+          y = NULL,
+          caption = paste0(caption_txt, " | density skipped (too few points)")
+        )
+    )
+
+    return(invisible(NULL))
+  }
+
+  # compute kernel density estimates
+  dens_obs <- stats::density(x_obs)
+  dens_imp <- stats::density(x_imp_miss)
+
+  df_dens <- data.frame(
+    x = dens_obs$x,
+    observed = dens_obs$y,
+    imputed_missing = stats::approx(
+      x = dens_imp$x, y = dens_imp$y,
+      xout = dens_obs$x, rule = 2
+    )$y
+  )
+
+  df_long <- df_dens %>%
+    tidyr::pivot_longer(
+      cols = c("observed", "imputed_missing"),
+      names_to = "source",
+      values_to = "density"
+    ) %>%
+    dplyr::mutate(
+      source = factor(
+        source,
+        levels = c("observed", "imputed_missing"),
+        labels = c("Observed (non-missing)", "Imputed (missing only)")
+      )
+    )
+
+  print(
+    ggplot2::ggplot(df_long, ggplot2::aes(x = x, y = density, color = source)) +
+      ggplot2::geom_line(linewidth = 1.2) +
+      ggplot2::labs(
+        title = gsub("<.*?>", "", beautify_names(variable)),
+        x = gsub("<.*?>", "", beautify_names(variable)),
+        y = "Density",
+        color = NULL,
+        caption = caption_txt
+      )
+  )
+
+  invisible(NULL)
+}
+```
+
+```{r}
+#| label: imputation-diagnostics-prep
+#| code-fold: true
+#| column: body-outset-right
+
+# identify variables with missing values for the diagnostic figures
+vars_with_missing <- missing_info$var[missing_info$missing_rate > 0]
+```
+
+```{r}
+#| label: imputation-diagnostics-figs
+#| fig-cap: "Observed versus Imputed Distributions (imputed values shown only at originally missing cells)"
+#| fig-subcap: true
+#| layout-ncol: 2
+#| layout-type: grid
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# generate diagnostic plots for each variable with missing values
+vars_with_missing %>%
+  purrr::walk(~ plot_imputation_diagnostic(
+    orig_data = df_impute,
+    imputed_data = imp_mf$ximp,
+    variable = .x
+  ))
+```
+
+## Compare Descriptive Statistics
+
+```{r}
+#| label: comparison-imputed-data
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# compute descriptive statistics for observed and imputed numeric data
+summ_obs <- df_impute %>%
+  numeric_df() %>%
+  describe(print_only = FALSE) %>%
+  dplyr::rename(variable = var) %>%
+  dplyr::select(-n)
+
+summ_imp <- imp_mf$ximp %>%
+  numeric_df() %>%
+  describe(print_only = FALSE) %>%
+  dplyr::rename(variable = var) %>%
+  dplyr::select(-n)
+
+comparison <- versus::compare(
+  summ_obs, summ_imp,
+  by = variable
+) %>%
+  versus::value_diffs_stacked(column = -dplyr::any_of("p")) %>%
+  dplyr::mutate(diff = val_b - val_a, .after = "val_b") %>%
+  dplyr::arrange(variable, column)
+
+# format column names for display via literal lookup (regex replacement
+# consumes backslashes in stringr/ICU replacement strings)
+metric_labels <- c(
+  "mean" = "$\\bar{x}$", "sd" = "$\\sigma$",
+  "skew" = "$Sk$", "se" = "$SE$", "kurtosis" = "$K$",
+  "norm" = "Normality"
+)
+comparison$column <- md_to_html(
+  dplyr::coalesce(unname(metric_labels[comparison$column]), comparison$column)
+)
+```
+
+```{r}
+#| label: comparison-imputed-data-attr
+#| code-fold: true
+#| column: body-outset-right
+
+# table metadata for comparison display
+footnote_text <- glue(
+  "$N$ = {nrow(df_impute)}; Descriptive statistics compared between observed ",
+  "values (missing ignored) and the fully imputed dataset."
+)
+col_names <- c("Metric", "Observed", "Imputed", "Difference")
+```
+
+```{r}
+#| label: tbl-comparison-imputed-data-tbl
+#| tbl-cap: "Comparison of Observed and Fully Imputed Data (Numeric Variables)"
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# prepare row grouping for table display
+pack_row_indices <- row_grouping(comparison$variable)
+names(pack_row_indices) %<>% beautify_names()
+
+# display the comparison table with grouped rows
+comparison %>%
+  dplyr::select(-variable) %>%
+  dplyr::rename(
+    Metric = column,
+    Observed = val_a,
+    Imputed = val_b,
+    Difference = diff
+  ) %>%
+  as_kable() %>%
+  kableExtra::pack_rows(
+    index = pack_row_indices,
+    escape = FALSE, label_row_css = "text-align: left;"
+  ) %>%
+  footnote() %>%
+  add_style()
+```
+
+## Integrate Final Dataset
+
+- *in*: `imp_mf$ximp` (imputed partnered cases), `df_non_partnered` (held out), `passthrough_frame` (intact passthrough values)
+- *out*: `imputed_data_combined.sav`
+- *rule*: rejoin imputed partnered with held-out non-partnered; join the passthrough columns once from the pre-coercion frame; preserve structural NAs on partner variables for non-partnered cases
+
+```{r}
+#| label: imputed-data-combined
+#| message: false
+#| code-fold: show
+#| column: body-outset-right
+
+# verify complete cases remain unchanged post-imputation
+complete_idx <- which(complete.cases(df_impute))
+stopifnot(identical(df_impute[complete_idx, ], imp_mf$ximp[complete_idx, ]))
+
+# add identifier and partner status back to imputed data
+imp_mf$ximp$idnummer <- df_partnered$idnummer
+imp_mf$ximp$partner <- 1
+
+# combine imputed partnered data with non-partnered data, then join the
+# passthrough columns once from the pre-coercion frame so class codes and
+# character labour-force status arrive intact for both branches; copy_labels
+# stays before the bind because it also restores the factor columns built
+# for missForest to their labelled numeric types
+imputed_data_combined <- copy_labels(
+  source = df_with_missings,
+  target = imp_mf$ximp
+) %>%
+  dplyr::bind_rows(df_non_partnered) %>%
+  dplyr::left_join(passthrough_frame, by = "idnummer") %>%
+  dplyr::select(idnummer, dplyr::everything())
+```
+
+```{r}
+#| label: structural-score-reset
+#| code-fold: show
+#| column: body-outset-right
+
+# step 5 sensitivity arm: reset imputed occupation scores where the
+# occupation is structurally absent (not in labour force, no occupation
+# reported); only occupation_unknown is item missingness. FALSE preserves
+# the current estimand for the like-for-like comparison against the
+# pre-reconciliation results.
+reset_structural_scores <- FALSE
+if (reset_structural_scores) {
+  reset_map <- list(
+    c(lf = "lf_status",         vars = "isei08_self",    s = "siops08"),
+    c(lf = "lf_status_father",  vars = "isei08_father",  s = "siops08_father"),
+    c(lf = "lf_status_mother",  vars = "isei08_mother",  s = "siops08_mother"),
+    c(lf = "lf_status_partner", vars = "isei08_partner", s = "siops08_partner")
+  )
+  for (m in reset_map) {
+    structural <- imputed_data_combined[[m["lf"]]] %in%
+      c("not_in_labour_force", "no_occupation_reported")
+    imputed_data_combined[[m["vars"]]][structural] <- NA
+    imputed_data_combined[[m["s"]]][structural] <- NA
+  }
+}
+
+# save the final combined dataset
+haven::write_sav(
+  imputed_data_combined,
+  here::here("assets", "data", "saved", "imputed_data_combined.sav")
+)
+```
+
+```{r}
+#| label: imputation-summary
+#| results: asis
+#| code-fold: true
+#| column: body-outset-right
+
+# generate summary of imputation process
+htmltools::HTML(glue(
+  "<div class='callout-note'>
+  <strong>Imputation Complete</strong><br><br>
+  <strong>Partnered respondents imputed:</strong> {nrow(df_partnered)}<br>
+  <strong>Non-partnered respondents (held out):</strong> {nrow(df_non_partnered)}<br>
+  <strong>Combined dataset:</strong> {nrow(imputed_data_combined)} observations<br>
+  <strong>Variables with imputed values:</strong> {length(vars_with_missing)}<br><br>
+  <strong>Output:</strong> <code>imputed_data_combined.sav</code> for Step 6
+  </div>"
+))
+```
+
+## Descriptive Statistics
+
+```{r}
+#| label: descriptive-stats-col-names
+#| code-fold: true
+#| column: body-outset-right
+
+col_names <- c(
+  "$\\ $", "$n$", "$\\bar{x}$", "$\\text{Min.}$", "$\\text{Max.}$",
+  "$SD$", "$\\text{Skewness}$", "$\\text{Kurtosis}$", "$SE$",
+  "$\\text{Normality}^{\\dagger}$"
+)
+
+footnote_text <- glue(
+  "Shapiro-Wilk Test$^{{\\dagger}}$;",
+  "values are normality test statistics (Shapiro-Wilk $W$ for $n \\leq 5000$, Lilliefors $D$ otherwise); ",
+  "smaller $W$ (larger $D$) suggests stronger departure from normality;",
+  "'&#x2014;' indicates variables with $\\leq 4$ unique values",
+  "(normality test not applicable)"
+)
+```
+
+```{r}
+#| label: tbl-descriptive-stats-imputed-data-combined
+#| tbl-cap: "Descriptive Statistics for Imputed Dataset (Combined Partnered and Non-Partnered Subgroups)"
+#| code-fold: show
+#| column: page-right
+
+imputed_data_combined %>%
+  dplyr::select(-idnummer) %>%
+  setNames(beautify_names(names(.))) %>%
+  describe(
+    normality = TRUE,
+    print_only = FALSE
+  ) %>%
+  dplyr::rowwise() %>%
+  dplyr::ungroup() %>%
+  dplyr::select(-p) %>%
+  as_kable() %>%
+  footnote() %>%
+  add_style()
+```
+
+::: {style="margin-block-end: 2rem;"}
+:::
+
+## Output
+
+| File                                               | Content                                                            |
+| -------------------------------------------------- | ------------------------------------------------------------------ |
+| `assets/data/saved/imputed_data_combined.sav`      | Imputed partnered cases rejoined with held-out non-partnered       |
+| `assets/data/saved/imputed_results_missforest.rds` | `missForest` output with run metadata (seed, ntree, mtry, maxiter) |
+
+**Next:** [Step 6 (Post-Imputation Finalization)](/analysis/data/post-imputation/index.qmd)
