@@ -904,6 +904,9 @@ all_model_gof <- function(x, ...) {
 #| column: body-outset-right
 
 # centralized table metadata definitions
+n_boot <- unique(vapply(lmrobs, function(x) nrow(x$bootstrap$ests), integer(1)))
+if (length(n_boot) != 1L) stop("models disagree on the bootstrap resample count")
+
 table_meta <- list(
   non_bootstrap = list(
     footnote = glue(
@@ -914,7 +917,7 @@ table_meta <- list(
   ),
   bootstrap = list(
     footnote = glue(
-      "Bootstrap estimates (1000 samples): coefficients = bootstrap means, ",
+      "Bootstrap estimates ({n_boot} samples): coefficients = bootstrap means, ",
       "SEs = bootstrap SDs, p-values from bootstrap distributions. ",
       "R² metrics = bootstrap mean (SD); AIC/BIC = bootstrap median ",
       "[2.5%, 97.5% percentiles], robust to degenerate resamples. ",
