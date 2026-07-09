@@ -3200,6 +3200,16 @@ Tukey, John W. 1977. <em>Exploratory Data Analysis</em>. Addison-Wesley.
       });
   }
 
+  function setDocumentTitle() {
+    // prefix the browser tab title with the step number, taken from the same
+    // window.config.offset that drives header and toc numbering; pages without
+    // a config (home, about) keep quarto's title untouched
+    const step = window.config?.offset;
+    if (step === undefined || step === null) return;
+    if (new RegExp("^" + step + "\\.\\s").test(document.title)) return;
+    document.title = step + ". " + document.title;
+  }
+
   function setStepIndicator() {
     // navbar is pinned (_quarto.yml: navbar.pinned), so the current step
     // sits on the left, beside the brand; menu items move to the right
@@ -3654,6 +3664,8 @@ Tukey, John W. 1977. <em>Exploratory Data Analysis</em>. Addison-Wesley.
         console.error(`utilities.html: ${label} failed`, err);
       }
     };
+
+    run("setDocumentTitle", setDocumentTitle);
 
     run("tableFooters", () => {
       document.querySelectorAll("tfoot").forEach((tfoot) => {

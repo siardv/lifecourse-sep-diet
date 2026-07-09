@@ -629,47 +629,47 @@ Warning in FUN(X[[i]], ...): NAs introduced by coercion</code></pre>
 <pre><code>  missForest iteration 1 in progress...done!
     estimated error(s): 0 0 0 1.04 1.48 1.36 0.463 0 0 0 0 0 76.4 74.5 78.3 68.5 43.3 44.5 43.1 42.7 0 0 0 0.201 0 
     difference(s): 0.0000288 0.00467 
-    time: 0.448 seconds
+    time: 0.45 seconds
 
   missForest iteration 2 in progress...done!
     estimated error(s): 0 0 0 0.979 1.36 1.25 0.463 0 0 0 0 0 74 68.9 75.8 69.5 40.7 43.8 42.1 42 0 0 0 0.208 0 
     difference(s): 0.0000151 0.00117 
-    time: 0.452 seconds
+    time: 0.456 seconds
 
   missForest iteration 3 in progress...done!
     estimated error(s): 0 0 0 0.975 1.36 1.23 0.465 0 0 0 0 0 75 69.1 79.7 74 39.9 44.3 40.5 40.1 0 0 0 0.213 0 
     difference(s): 0.00000328 0.00102 
-    time: 0.468 seconds
+    time: 0.452 seconds
 
   missForest iteration 4 in progress...done!
     estimated error(s): 0 0 0 0.972 1.35 1.23 0.453 0 0 0 0 0 72.7 70.9 80.3 68.1 40.5 45 41.1 39.4 0 0 0 0.209 0 
     difference(s): 0.00000151 0.000438 
-    time: 0.453 seconds
+    time: 0.451 seconds
 
   missForest iteration 5 in progress...done!
     estimated error(s): 0 0 0 0.966 1.33 1.24 0.47 0 0 0 0 0 74 72.1 79.3 72.2 41.6 44.3 41.4 40.5 0 0 0 0.199 0 
     difference(s): 0.000000992 0.000292 
-    time: 0.467 seconds
+    time: 0.47 seconds
 
   missForest iteration 6 in progress...done!
     estimated error(s): 0 0 0 0.958 1.35 1.24 0.469 0 0 0 0 0 72.5 69.4 75.8 70.1 41.1 44.7 43.7 41.1 0 0 0 0.212 0 
     difference(s): 0.00000088 0.000729 
-    time: 0.474 seconds
+    time: 0.45 seconds
 
   missForest iteration 7 in progress...done!
     estimated error(s): 0 0 0 0.959 1.33 1.24 0.466 0 0 0 0 0 73.8 69.9 79 69.4 39.8 48 44.6 41.1 0 0 0 0.209 0 
     difference(s): 0.000000826 0.00131 
-    time: 0.45 seconds
+    time: 0.451 seconds
 
   missForest iteration 8 in progress...done!
     estimated error(s): 0 0 0 0.944 1.34 1.23 0.483 0 0 0 0 0 77.2 71 80.9 70.2 41.7 42.9 42 41.3 0 0 0 0.198 0 
     difference(s): 0.000000824 0.00102 
-    time: 0.451 seconds
+    time: 0.457 seconds
 
   missForest iteration 9 in progress...done!
     estimated error(s): 0 0 0 0.966 1.34 1.26 0.46 0 0 0 0 0 75.8 69.1 79.4 70.1 40.7 43.5 42.7 40.4 0 0 0 0.213 0 
     difference(s): 0.000000712 0.000583 
-    time: 0.457 seconds
+    time: 0.453 seconds
 
   missForest iteration 10 in progress...done!
     estimated error(s): 0 0 0 0.958 1.32 1.25 0.471 0 0 0 0 0 74.2 64.8 80.4 69.9 41.4 43.3 42.3 41.6 0 0 0 0.205 0 
@@ -2932,6 +2932,16 @@ Tang, Fei, and Hemant Ishwaran. 2017. <span>“Random Forest Missing Data Algori
       });
   }
 
+  function setDocumentTitle() {
+    // prefix the browser tab title with the step number, taken from the same
+    // window.config.offset that drives header and toc numbering; pages without
+    // a config (home, about) keep quarto's title untouched
+    const step = window.config?.offset;
+    if (step === undefined || step === null) return;
+    if (new RegExp("^" + step + "\\.\\s").test(document.title)) return;
+    document.title = step + ". " + document.title;
+  }
+
   function setStepIndicator() {
     // navbar is pinned (_quarto.yml: navbar.pinned), so the current step
     // sits on the left, beside the brand; menu items move to the right
@@ -3386,6 +3396,8 @@ Tang, Fei, and Hemant Ishwaran. 2017. <span>“Random Forest Missing Data Algori
         console.error(`utilities.html: ${label} failed`, err);
       }
     };
+
+    run("setDocumentTitle", setDocumentTitle);
 
     run("tableFooters", () => {
       document.querySelectorAll("tfoot").forEach((tfoot) => {
