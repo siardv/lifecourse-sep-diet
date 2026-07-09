@@ -4,7 +4,7 @@
 # usage: scripts/run_step2_rebuild.sh   (from anywhere; paths are absolute)
 
 set -u
-project="$HOME/projects/lifecourse-sep-diet"
+project="$HOME/projects/gh/lifecourse-sep-diet"
 cd "$project" || exit 1
 
 qmd="analysis/data/preparation/index.qmd"

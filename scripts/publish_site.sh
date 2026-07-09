@@ -2,7 +2,7 @@
 # publish the rendered _site to gh-pages through an isolated worktree.
 # render first, then run this; it never renders and never touches main.
 set -u
-project="$HOME/projects/lifecourse-sep-diet"
+project="$HOME/projects/gh/lifecourse-sep-diet"
 cd "$project" || exit 1
 [ "$(find "_site" -name "index.html" | wc -l | tr -d ' ')" -gt 10 ] \
   || { echo "abort: _site looks incomplete; run quarto render first"; exit 1; }
