@@ -1,0 +1,9 @@
+---
+title: "About"
+---
+
+This site documents the reproducible analysis pipeline for a study of life-course socioeconomic position, gender, and diet quality among Dutch adults, from data preparation through model validation. The accompanying source code is available in the [GitHub repository](https://github.com/siardv/lifecourse-sep-diet).
+
+## Use of generative AI
+
+All code, analyses, and text in this repository were written by the author. Generative AI tools (ChatGPT, Gemini, Claude, and Grok) were used only to obtain feedback and language suggestions on author-written manuscript drafts, as stated in the manuscript's declaration of generative AI and AI-assisted technologies; they were not used to generate the code, the analyses, or the references.

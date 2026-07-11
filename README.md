@@ -51,3 +51,7 @@ scripts/publish_site.sh  # publish _site/ to the gh-pages branch
 ## Status
 
 Manuscript under review. Author: Siard van den Bosch.
+
+## Use of generative AI
+
+All code, analyses, and text in this repository were written by the author. Generative AI tools (ChatGPT, Gemini, Claude, and Grok) were used only to obtain feedback and language suggestions on author-written manuscript drafts, as stated in the manuscript's declaration of generative AI and AI-assisted technologies; they were not used to generate the code, the analyses, or the references.
